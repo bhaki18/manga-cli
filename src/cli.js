@@ -17,7 +17,7 @@ const viewer = new MangaViewer();
 program
   .name('manga-cli')
   .description('Terminal CLI to read manga online from One Piece Power')
-  .version('1.0.0')
+  .version('1.1.0')
   .argument('[query]', 'Search manga by title')
   .action(async (query) => {
     try {

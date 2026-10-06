@@ -1,63 +1,75 @@
 # 📖 Manga CLI
 
-> Una CLI interattiva e leggera per terminale ispirata ad `ani-cli`, progettata per cercare e leggere manga online in italiano con fonte **One Piece Power**.
+> A fast and lightweight interactive terminal CLI to search and read manga online with RAM caching and instant streaming, inspired by `ani-cli`.
 
 ---
 
-## ✨ Caratteristiche
+## ✨ Features
 
-- ⚡ **Zero scrittura su disco**: Le immagini vengono caricate direttamente nella RAM (`/dev/shm` su Linux) e distrutte all'uscita o al cambio capitolo, garantendo velocità estrema e preservando il tuo disco.
-- 🔍 **Ricerca Rapida & Autocompletamento**: Cerca per titolo, autore o genere e naviga tra i capitoli con comodi menu interattivi nel terminale.
-- 🖼️ **Compatibilità Viewer**: Si integra nativamente con il visualizzatore d'immagini installato sul tuo sistema (`feh`, `sxiv`, `imv`, oppure `mpv`).
-- ⏭️ **Lettura Continua**: Al termine di un capitolo puoi passare direttamente al capitolo successivo con un tasto senza dover rieseguire il comando.
+- ⚡ **Instant Real-Time Streaming**: Opens in less than a second on page 1 while subsequent pages stream directly into the viewer's playlist in the background.
+- 🧠 **Zero Disk Writes (RAM Caching)**: Pages are downloaded straight into RAM (`/dev/shm` on Linux) and wiped instantly upon closing, keeping your disk clean and wear-free.
+- 🔍 **Interactive Search & Paged Navigation**: Fixed-viewport menu navigation (`pageSize: 10`) ensures your active selection is always clearly visible. Type to filter through 1,200+ chapters effortlessly.
+- 🖼️ **Multi-Viewer Support**: Seamless integration with your favourite graphical viewer (`mpv` via IPC socket, `feh` via inotify auto-reload, `sxiv`, `imv`, or `loupe`).
+- ⏭️ **Continuous Reading**: Instantly jump to the next chapter at the press of a key once finished.
 
 ---
 
-## 📥 Installazione
+## 📥 Installation
 
-### Su Arch Linux (AUR)
+### Arch Linux (Custom Repository)
 
-Puoi installarlo tramite il tuo gestore AUR preferito:
+Add the repository to `/etc/pacman.conf`:
+
+```ini
+[manga-cli]
+SigLevel = Optional TrustAll
+Server = https://bhaki18.github.io/manga-cli/$arch
+```
+
+Then install with `pacman`:
 
 ```bash
-# Con yay
-yay -S manga-cli-git
+sudo pacman -Sy manga-cli
+```
 
-# Con paru
+### Arch Linux (Manual via makepkg)
+
+```bash
+git clone https://github.com/bhaki18/manga-cli.git
+cd manga-cli
+makepkg -si
+```
+
+### AUR (Once available)
+
+```bash
+yay -S manga-cli-git
+# or
 paru -S manga-cli-git
 ```
 
-### Installazione Manuale / Altre Distribuzioni
+### Other Linux / Generic Install
 
-Assicurati di avere installato **Node.js** (v18+) e **cURL**.
+Requires **Node.js** (v18+) and **cURL**:
 
 ```bash
-# Clona il repository
 git clone https://github.com/bhaki18/manga-cli.git
 cd manga-cli
-
-# Installa le dipendenze
 npm install
-
-# Crea il comando globale di sistema
 sudo npm link
 ```
 
 ---
 
-## 🚀 Come si usa
+## 🚀 Usage
 
-Dopo l'installazione, il comando è subito disponibile ovunque nel tuo terminale.
+Once installed, simply run:
 
-### 1. Modalità Interattiva
-Avvia la CLI per digitare o cercare qualsiasi titolo tramite menu:
 ```bash
+# Launch interactive search menu
 manga-cli
-```
 
-### 2. Ricerca Diretta
-Puoi passare direttamente il nome del manga che vuoi leggere:
-```bash
+# Or search directly for a manga title
 manga-cli "one piece"
 manga-cli "berserk"
 manga-cli "bleach"
@@ -65,17 +77,17 @@ manga-cli "bleach"
 
 ---
 
-## 👁️ Visualizzatori supportati
+## 👁️ Supported Viewers
 
-`manga-cli` rileva e utilizza automaticamente il visualizzatore d'immagini presente sul tuo sistema in questo ordine di priorità:
+`manga-cli` automatically detects and picks the best available image viewer installed on your system:
 
-1. **feh** *(consigliato)*: `sudo pacman -S feh`
-2. **sxiv**: `sudo pacman -S sxiv`
-3. **imv**: `sudo pacman -S imv`
-4. **mpv**: `sudo pacman -S mpv`
+1. **mpv**: `sudo pacman -S mpv` (uses real-time dynamic IPC socket streaming)
+2. **feh** *(recommended for image galleries)*: `sudo pacman -S feh` (uses `--auto-reload` inotify)
+3. **sxiv**: `sudo pacman -S sxiv`
+4. **imv**: `sudo pacman -S imv`
 
 ---
 
-## 📜 Licenza
+## 📜 License
 
-Rilasciato sotto licenza [MIT](LICENSE).
+Released under the [MIT](LICENSE) License.

@@ -1,8 +1,8 @@
 # Maintainer: bhaki18 <https://github.com/bhaki18>
 pkgname=manga-cli-git
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
-pkgdesc="CLI per leggere manga online da terminale ispirata ad ani-cli con fonte One Piece Power"
+pkgdesc="Terminal CLI to read manga online with RAM caching, inspired by ani-cli"
 arch=('any')
 url="https://github.com/bhaki18/manga-cli"
 license=('MIT')
