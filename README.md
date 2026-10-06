@@ -1,68 +1,81 @@
-# MANGA CLI
+# 📖 Manga CLI
 
-`manga-cli` è una CLI interattiva per terminale ispirata ad `ani-cli`, pensata per cercare e leggere manga online in italiano con fonte **One Piece Power**.
+> Una CLI interattiva e leggera per terminale ispirata ad `ani-cli`, progettata per cercare e leggere manga online in italiano con fonte **One Piece Power**.
+
+---
 
 ## ✨ Caratteristiche
-- **Zero scrittura su disco**: Le pagine vengono scaricate direttamente in RAM (`/dev/shm` su Linux) e rimosse all'uscita o al cambio capitolo.
-- **Provider Modulare**: Architettura a plugin estensibile ad altre fonti in futuro.
-- **Supporto viewer flessibile**: Compatibile con `mpv`, `feh`, `sxiv`, `imv`.
-- **Interfaccia Interattiva**: Ricerca e navigazione rapida con autocompletamento.
 
-## 🚀 Requisiti
-- **Node.js** (v18+)
-- **cURL**
-- Un visualizzatore di immagini (consigliati `feh`, `sxiv`, oppure `mpv`)
+- ⚡ **Zero scrittura su disco**: Le immagini vengono caricate direttamente nella RAM (`/dev/shm` su Linux) e distrutte all'uscita o al cambio capitolo, garantendo velocità estrema e preservando il tuo disco.
+- 🔍 **Ricerca Rapida & Autocompletamento**: Cerca per titolo, autore o genere e naviga tra i capitoli con comodi menu interattivi nel terminale.
+- 🖼️ **Compatibilità Viewer**: Si integra nativamente con il visualizzatore d'immagini installato sul tuo sistema (`feh`, `sxiv`, `imv`, oppure `mpv`).
+- ⏭️ **Lettura Continua**: Al termine di un capitolo puoi passare direttamente al capitolo successivo con un tasto senza dover rieseguire il comando.
 
-## 📦 Installazione e Uso
+---
+
+## 📥 Installazione
+
+### Su Arch Linux (AUR)
+
+Puoi installarlo tramite il tuo gestore AUR preferito:
 
 ```bash
+# Con yay
+yay -S manga-cli-git
+
+# Con paru
+paru -S manga-cli-git
+```
+
+### Installazione Manuale / Altre Distribuzioni
+
+Assicurati di avere installato **Node.js** (v18+) e **cURL**.
+
+```bash
+# Clona il repository
+git clone https://github.com/bhaki18/manga-cli.git
+cd manga-cli
+
 # Installa le dipendenze
 npm install
 
-# Avvia la CLI in modalità interattiva
-node src/cli.js
-
-# Oppure cerca direttamente un titolo
-node src/cli.js "one piece"
-node src/cli.js "berserk"
+# Crea il comando globale di sistema
+sudo npm link
 ```
 
-Per installarlo globalmente nel sistema:
+---
+
+## 🚀 Come si usa
+
+Dopo l'installazione, il comando è subito disponibile ovunque nel tuo terminale.
+
+### 1. Modalità Interattiva
+Avvia la CLI per digitare o cercare qualsiasi titolo tramite menu:
 ```bash
-npm link
-# Da quel momento puoi usare direttamente:
+manga-cli
+```
+
+### 2. Ricerca Diretta
+Puoi passare direttamente il nome del manga che vuoi leggere:
+```bash
 manga-cli "one piece"
+manga-cli "berserk"
+manga-cli "bleach"
 ```
 
-## 🐳 Test con Docker (Arch Linux)
+---
 
-Puoi testare l'applicazione in un container pulito basato su **Arch Linux**:
+## 👁️ Visualizzatori supportati
 
-```bash
-# Costruisci l'immagine Arch Linux
-docker build -t manga-cli:arch-test .
+`manga-cli` rileva e utilizza automaticamente il visualizzatore d'immagini presente sul tuo sistema in questo ordine di priorità:
 
-# Esegui la CLI nel container
-docker run --rm -it -v /dev/shm:/dev/shm manga-cli:arch-test
+1. **feh** *(consigliato)*: `sudo pacman -S feh`
+2. **sxiv**: `sudo pacman -S sxiv`
+3. **imv**: `sudo pacman -S imv`
+4. **mpv**: `sudo pacman -S mpv`
 
-# Oppure test con ricerca diretta
-docker run --rm -it -v /dev/shm:/dev/shm manga-cli:arch-test "one piece"
-```
+---
 
-## 📦 Pubblicazione su AUR (Arch User Repository)
+## 📜 Licenza
 
-È presente il file [`PKGBUILD`](file:///home/adp/Desktop/manga-cli/PKGBUILD) pronto per `manga-cli-git`:
-
-1. Assicurati di aver fatto il commit e push del tuo repo su GitHub (`https://github.com/bhaki18/manga-cli`).
-2. Testa la creazione del pacchetto con `makepkg -si`.
-3. Crea il repository su AUR:
-   ```bash
-   git clone ssh://aur@aur.archlinux.org/manga-cli-git.git
-   cd manga-cli-git
-   cp /home/adp/Desktop/manga-cli/PKGBUILD .
-   makepkg --printsrcinfo > .SRCINFO
-   git add PKGBUILD .SRCINFO
-   git commit -m "Initial commit for manga-cli-git"
-   git push origin master
-   ```
-
+Rilasciato sotto licenza [MIT](LICENSE).
