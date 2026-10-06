@@ -1,17 +1,20 @@
-const { execFile, spawn } = require('child_process');
+const { execFile } = require('child_process');
 
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const DOH_RESOLVER = 'https://1.1.1.1/dns-query';
 
 /**
- * Fetch text/html using curl to avoid Cloudflare TLS fingerprint blocks
+ * Fetch text/html or json using curl with DoH to prevent DNS blocking (e.g. AGCOM / ISP blocks)
  */
 function fetchHtml(url, referer = null) {
   return new Promise((resolve, reject) => {
     const args = [
       '-s',
+      '-g',
       '-L',
+      '--doh-url', DOH_RESOLVER,
       '-A', DEFAULT_USER_AGENT,
-      '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      '-H', 'Accept: text/html,application/xhtml+xml,application/xml,application/json;q=0.9,*/*;q=0.8',
       '-H', 'Accept-Language: it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
     ];
 
@@ -21,13 +24,25 @@ function fetchHtml(url, referer = null) {
 
     args.push(url);
 
-    execFile('curl', args, { maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile('curl', args, { maxBuffer: 20 * 1024 * 1024 }, (err, stdout) => {
       if (err) {
         return reject(new Error(`cURL error: ${err.message}`));
       }
       resolve(stdout);
     });
   });
+}
+
+/**
+ * Fetch JSON directly
+ */
+async function fetchJson(url, referer = null) {
+  const text = await fetchHtml(url, referer);
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error(`Failed to parse JSON response: ${err.message}`);
+  }
 }
 
 /**
@@ -38,6 +53,7 @@ function checkUrlExists(url, referer = null) {
     const args = [
       '-s',
       '-I',
+      '--doh-url', DOH_RESOLVER,
       '-A', DEFAULT_USER_AGENT,
     ];
     if (referer) {
@@ -61,6 +77,7 @@ function downloadToFile(url, destPath, referer = null) {
     const args = [
       '-s',
       '-L',
+      '--doh-url', DOH_RESOLVER,
       '-A', DEFAULT_USER_AGENT,
       '-o', destPath
     ];
@@ -78,6 +95,7 @@ function downloadToFile(url, destPath, referer = null) {
 
 module.exports = {
   fetchHtml,
+  fetchJson,
   checkUrlExists,
   downloadToFile,
   DEFAULT_USER_AGENT

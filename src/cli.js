@@ -4,24 +4,68 @@ const { Command } = require('commander');
 const inquirer = require('inquirer');
 const chalk = require('chalk');
 const ora = require('ora');
+const { spawn } = require('child_process');
 const OnePiecePowerProvider = require('./providers/onepiecepower');
+const MangaDexProvider = require('./providers/mangadex');
+const MangapillProvider = require('./providers/mangapill');
 const MangaViewer = require('./viewer/reader');
+const { LANGUAGES, getLanguageName, getLanguageFlag } = require('./utils/languages');
 
 // Register autocomplete prompt in inquirer
 inquirer.registerPrompt('autocomplete', require('inquirer-autocomplete-prompt'));
 
 const program = new Command();
-const provider = new OnePiecePowerProvider();
+const oppProvider = new OnePiecePowerProvider();
+const mdProvider = new MangaDexProvider();
+const mpProvider = new MangapillProvider();
 const viewer = new MangaViewer();
 
 program
   .name('manga-cli')
-  .description('Terminal CLI to read manga online from One Piece Power')
+  .description('Terminal CLI to read manga online with RAM caching and 30+ language support')
   .version('1.1.0')
   .argument('[query]', 'Search manga by title')
-  .action(async (query) => {
+  .option('-l, --lang <language>', 'Filter by scan language code (e.g. it, en, es, fr, ja)', null)
+  .action(async (query, options) => {
     try {
-      console.log(chalk.bold.cyan('\n  📖 MANGA CLI - One Piece Power Edition\n'));
+      console.log(chalk.bold.cyan('\n  📖 MANGA CLI - Universal Terminal Manga Reader\n'));
+
+      // 0. Language Selection
+      let selectedLang = options.lang ? options.lang.toLowerCase() : null;
+
+      if (!selectedLang) {
+        const langChoices = [
+          { name: '🇮🇹 Italian (Italiano)', value: 'it' },
+          { name: '🇬🇧 English', value: 'en' },
+          { name: '🇪🇸 Spanish (Español)', value: 'es' },
+          { name: '🇫🇷 French (Français)', value: 'fr' },
+          { name: '🇩🇪 German (Deutsch)', value: 'de' },
+          { name: '🇧🇷 Portuguese (Brasil)', value: 'pt-br' },
+          { name: '🇷🇺 Russian (Русский)', value: 'ru' },
+          { name: '🇯🇵 Japanese (日本語)', value: 'ja' },
+          { name: '🌍 All Languages (Browse all)', value: 'all' },
+          new inquirer.Separator('── More Languages ──'),
+          ...LANGUAGES.filter(l => !['it', 'en', 'es', 'fr', 'de', 'pt-br', 'ru', 'ja'].includes(l.code)).map(l => ({
+            name: `${l.flag} ${l.name}`,
+            value: l.code
+          }))
+        ];
+
+        const langAnswer = await inquirer.prompt([
+          {
+            type: 'autocomplete',
+            name: 'language',
+            message: '🌐 Select scanlation language (type to search among 30+ languages):',
+            pageSize: 10,
+            source: async (answersSoFar, input) => {
+              if (!input) return langChoices;
+              const clean = input.toLowerCase();
+              return langChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
+            }
+          }
+        ]);
+        selectedLang = langAnswer.language;
+      }
 
       let searchQuery = query;
       if (!searchQuery) {
@@ -36,21 +80,44 @@ program
         searchQuery = inputAnswer.query;
       }
 
-      // 1. Search manga
-      const spinner = ora(`Searching for "${searchQuery}"...`).start();
-      const results = await provider.search(searchQuery);
+      // 1. Search across providers
+      const langLabel = selectedLang.toUpperCase();
+      const spinner = ora(`Searching for "${searchQuery}" [${langLabel}]...`).start();
+
+      let results = [];
+
+      if (selectedLang === 'it') {
+        results = await oppProvider.search(searchQuery, 'it');
+      } else {
+        const promises = [
+          mdProvider.search(searchQuery, selectedLang),
+          (selectedLang === 'en' || selectedLang === 'all') ? mpProvider.search(searchQuery, selectedLang) : Promise.resolve([]),
+          (selectedLang === 'en' || selectedLang === 'all') ? oppProvider.search(searchQuery, selectedLang) : Promise.resolve([])
+        ];
+        const [mdResults, pillResults, oppResults] = await Promise.all(promises);
+        results = [...pillResults, ...oppResults, ...mdResults];
+      }
       spinner.stop();
 
       if (results.length === 0) {
-        console.log(chalk.red(`❌ No manga found for "${searchQuery}".`));
+        console.log(chalk.red(`❌ No manga found for "${searchQuery}" in language [${selectedLang}].`));
         process.exit(0);
       }
 
-      // 2. Select Manga with Inquirer Autocomplete + Fixed Page Size Window
-      const mangaChoices = results.slice(0, 50).map(m => ({
-        name: `${m.title} ${m.author ? chalk.dim(`(Author: ${m.author})`) : ''}`,
-        value: m
-      }));
+      // 2. Select Manga
+      const mangaChoices = results.slice(0, 50).map(m => {
+        const flag = getLanguageFlag(m.language || selectedLang);
+        let sourceLabel = chalk.magenta('[MangaDex]');
+        if (m.source === 'mangapill') {
+          sourceLabel = chalk.yellow('[Mangapill]');
+        } else if (m.source === 'onepiecepower' || !m.source) {
+          sourceLabel = chalk.blue('[OPPower]');
+        }
+        return {
+          name: `${flag} ${sourceLabel} ${chalk.bold(m.title)} ${m.author ? chalk.dim(`(Author: ${m.author})`) : ''}`,
+          value: m
+        };
+      });
 
       const mangaAnswer = await inquirer.prompt([
         {
@@ -61,20 +128,26 @@ program
           source: async (answersSoFar, input) => {
             if (!input) return mangaChoices;
             const clean = input.toLowerCase();
-            return mangaChoices.filter(c => c.name.toLowerCase().includes(clean));
+            return mangaChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
           }
         }
       ]);
 
       const selectedManga = mangaAnswer.manga;
+      let chosenProvider = oppProvider;
+      if (selectedManga.source === 'mangadex') {
+        chosenProvider = mdProvider;
+      } else if (selectedManga.source === 'mangapill') {
+        chosenProvider = mpProvider;
+      }
 
       // 3. Fetch Chapters
       spinner.start(`Loading chapters for ${selectedManga.title}...`);
-      const chapters = await provider.getChapters(selectedManga.url);
+      const chapters = await chosenProvider.getChapters(selectedManga.url, selectedLang);
       spinner.stop();
 
       if (chapters.length === 0) {
-        console.log(chalk.red('❌ No chapters available for this manga.'));
+        console.log(chalk.red('❌ No chapters available for this manga in the selected language.'));
         process.exit(0);
       }
 
@@ -99,26 +172,44 @@ program
             source: async (answersSoFar, input) => {
               if (!input) return chapterChoices;
               const clean = input.toLowerCase();
-              return chapterChoices.filter(c => c.name.toLowerCase().includes(clean));
+              return chapterChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
             }
           }
         ]);
 
         const selectedChapter = chapterAnswer.chapter;
 
-        // 4. Extract pages with fast parallel batch discovery
+        // 4. Extract pages
         spinner.start(`Discovering pages for "${selectedChapter.title}"...`);
-        const chapterData = await provider.getChapterPages(selectedChapter.url);
+        const chapterData = await chosenProvider.getChapterPages(selectedChapter.url);
         spinner.stop();
 
-        if (chapterData.pages.length === 0) {
+        // If it's an official external release (like MangaPlus Shueisha)
+        if (chapterData.externalUrl) {
+          console.log(chalk.yellow(`\nℹ️ This chapter is hosted externally on official publisher: MangaPlus`));
+          const openAns = await inquirer.prompt([
+            {
+              type: 'confirm',
+              name: 'openWeb',
+              message: `Open official chapter in your browser? (${chalk.cyan(chapterData.externalUrl)})`,
+              default: true
+            }
+          ]);
+          if (openAns.openWeb) {
+            spawn('xdg-open', [chapterData.externalUrl], { stdio: 'ignore' });
+            console.log(chalk.green('Opened in browser!'));
+          }
+          continue;
+        }
+
+        if (!chapterData.pages || chapterData.pages.length === 0) {
           console.log(chalk.red('❌ Unable to find pages for this chapter.'));
           continue;
         }
 
         console.log(chalk.blue(`⚡ Streaming ${chapterData.pages.length} pages in real time into RAM (/dev/shm)...`));
 
-        // 5. Open reader instantly on page 1 and append all subsequent pages via IPC live streaming
+        // 5. Open reader instantly on page 1 and append all subsequent pages
         viewer.prepareChapterDir(selectedManga.title, selectedChapter.id);
         const downloadSpinner = ora('Buffering page 1 (opening viewer)...').start();
 
@@ -158,8 +249,13 @@ program
 
         if (nextActionAnswer.action === 'next' && nextChapter) {
           spinner.start(`Discovering pages for "${nextChapter.title}"...`);
-          const nextData = await provider.getChapterPages(nextChapter.url);
+          const nextData = await chosenProvider.getChapterPages(nextChapter.url);
           spinner.stop();
+
+          if (nextData.externalUrl) {
+            spawn('xdg-open', [nextData.externalUrl], { stdio: 'ignore' });
+            continue;
+          }
 
           viewer.prepareChapterDir(selectedManga.title, nextChapter.id);
           const dlSpin = ora('Buffering page 1...').start();

@@ -6,6 +6,8 @@
 
 ## ✨ Features
 
+- 📚 **Multiple Free Sources**: Aggregates from **One Piece Power** (complete Italian & English archive), **Mangapill** (complete English catalog with thousands of titles), and **MangaDex** (official & community multi-language fan-translations).
+- 🌐 **30+ Supported Languages**: Read scans in Italian, English, Spanish, French, German, Japanese, Portuguese, Russian, and 25+ more languages with native flag badges.
 - ⚡ **Instant Real-Time Streaming**: Opens in less than a second on page 1 while subsequent pages stream directly into the viewer's playlist in the background.
 - 🧠 **Zero Disk Writes (RAM Caching)**: Pages are downloaded straight into RAM (`/dev/shm` on Linux) and wiped instantly upon closing, keeping your disk clean and wear-free.
 - 🔍 **Interactive Search & Paged Navigation**: Fixed-viewport menu navigation (`pageSize: 10`) ensures your active selection is always clearly visible. Type to filter through 1,200+ chapters effortlessly.
@@ -66,13 +68,13 @@ sudo npm link
 Once installed, simply run:
 
 ```bash
-# Launch interactive search menu
+# Launch interactive mode (prompts for language & manga)
 manga-cli
 
-# Or search directly for a manga title
-manga-cli "one piece"
-manga-cli "berserk"
-manga-cli "bleach"
+# Search directly with language flags
+manga-cli "one piece" --lang it      # Italian scans
+manga-cli "one piece" --lang en      # English scans
+manga-cli "berserk"                  # Global search (shows [ITA] and [ENG] badges)
 ```
 
 ---

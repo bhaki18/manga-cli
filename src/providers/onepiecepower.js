@@ -20,13 +20,24 @@ class OnePiecePowerProvider extends BaseProvider {
     const $ = cheerio.load(html);
     const mangaList = [];
 
-    // Always include One Piece as primary entry
+    // One Piece ITA
     mangaList.push({
-      title: 'One Piece (ITA)',
+      title: 'One Piece',
       url: `${this.baseUrl}/manga8/onepiece/volumi/lista-capitoli`,
       author: 'Eiichiro Oda',
       genres: 'Avventura, Shounen, Azione',
-      altTitle: 'One Piece'
+      altTitle: 'One Piece',
+      language: 'it'
+    });
+
+    // One Piece ENG (Full english release of all 1200 chapters)
+    mangaList.push({
+      title: 'One Piece (English Edition)',
+      url: `${this.baseUrl}/manga8/one-piece-eng/chapter-list`,
+      author: 'Eiichiro Oda',
+      genres: 'Adventure, Shounen, Action',
+      altTitle: 'One Piece ENG',
+      language: 'en'
     });
 
     $('a').each((_, el) => {
@@ -51,7 +62,8 @@ class OnePiecePowerProvider extends BaseProvider {
           url: fullUrl,
           author,
           genres,
-          altTitle: alt
+          altTitle: alt,
+          language: 'it' // Most scanlations on OPP are translated to Italian
         });
       }
     });
@@ -61,13 +73,14 @@ class OnePiecePowerProvider extends BaseProvider {
   }
 
   /**
-   * Search manga by keyword
+   * Search manga by keyword and optional language filter
    */
-  async search(query) {
+  async search(query, lang = null) {
     const catalog = await this.getCatalog();
     const cleanQuery = query.toLowerCase().trim();
 
     return catalog.filter(m => {
+      if (lang && m.language !== lang) return false;
       const matchTitle = m.title.toLowerCase().includes(cleanQuery);
       const matchAlt = m.altTitle && m.altTitle.toLowerCase().includes(cleanQuery);
       const matchAuthor = m.author && m.author.toLowerCase().includes(cleanQuery);
@@ -93,7 +106,7 @@ class OnePiecePowerProvider extends BaseProvider {
           fullUrl = `${this.baseUrl}${fullUrl}`;
         } else {
           // Relative to current page
-          const cleanMangaUrl = mangaUrl.replace(/\/lista-capitoli.*$/, '');
+          const cleanMangaUrl = mangaUrl.replace(/\/(lista-capitoli|chapter-list).*$/, '');
           fullUrl = `${cleanMangaUrl}/${href.replace(/^\.\//, '')}`;
         }
       }
@@ -105,7 +118,7 @@ class OnePiecePowerProvider extends BaseProvider {
       if (capId && !chapters.some(c => c.url === fullUrl)) {
         chapters.push({
           id: capId,
-          title: title || `Capitolo ${capId}`,
+          title: title || `Chapter ${capId}`,
           url: fullUrl
         });
       }
@@ -165,6 +178,14 @@ class OnePiecePowerProvider extends BaseProvider {
           : (parseFloat(rawCap) < 100 ? (rawCap.startsWith('0') ? rawCap.substring(1) : rawCap) : rawCap);
         let formattedPage = pageNum < 10 ? '0' + pageNum : '' + pageNum;
         return `${baseUrl}volume${vol}/capitolo${formattedCap}/${formattedPage}.jpg`;
+      });
+      // Also candidate for non-italian capitolo folder
+      candidateGenerators.push((pageNum) => {
+        let formattedCap = rawCap.includes('-') 
+          ? rawCap.replace(/^0/, '') 
+          : (parseFloat(rawCap) < 100 ? (rawCap.startsWith('0') ? rawCap.substring(1) : rawCap) : rawCap);
+        let formattedPage = pageNum < 10 ? '0' + pageNum : '' + pageNum;
+        return `${baseUrl}volume${vol}/chapter${formattedCap}/${formattedPage}.jpg`;
       });
     }
 
