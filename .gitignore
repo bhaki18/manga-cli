@@ -1,1 +1,6 @@
 node_modules/
+*.pkg.tar.zst
+src/manga-cli-git/
+pkg/
+manga-cli-git/
+*.log

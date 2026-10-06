@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 
 const { Command } = require('commander');
-const prompts = require('prompts');
+const inquirer = require('inquirer');
 const chalk = require('chalk');
 const ora = require('ora');
 const OnePiecePowerProvider = require('./providers/onepiecepower');
 const MangaViewer = require('./viewer/reader');
+
+// Register autocomplete prompt in inquirer
+inquirer.registerPrompt('autocomplete', require('inquirer-autocomplete-prompt'));
 
 const program = new Command();
 const provider = new OnePiecePowerProvider();
@@ -13,72 +16,69 @@ const viewer = new MangaViewer();
 
 program
   .name('manga-cli')
-  .description('CLI per leggere manga da One Piece Power direttamente da terminale')
+  .description('Terminal CLI to read manga online from One Piece Power')
   .version('1.0.0')
-  .argument('[query]', 'Cerca un manga per nome')
+  .argument('[query]', 'Search manga by title')
   .action(async (query) => {
     try {
       console.log(chalk.bold.cyan('\n  📖 MANGA CLI - One Piece Power Edition\n'));
 
       let searchQuery = query;
       if (!searchQuery) {
-        const response = await prompts({
-          type: 'text',
-          name: 'query',
-          message: '🔍 Che manga vuoi leggere?',
-          validate: value => value.trim().length > 0 ? true : 'Inserisci un titolo da cercare'
-        });
-
-        if (!response.query) {
-          console.log(chalk.yellow('Operazione annullata.'));
-          process.exit(0);
-        }
-        searchQuery = response.query;
+        const inputAnswer = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'query',
+            message: '🔍 What manga do you want to read?',
+            validate: value => value.trim().length > 0 ? true : 'Please enter a title to search'
+          }
+        ]);
+        searchQuery = inputAnswer.query;
       }
 
       // 1. Search manga
-      const spinner = ora(`Ricerca di "${searchQuery}" in corso...`).start();
+      const spinner = ora(`Searching for "${searchQuery}"...`).start();
       const results = await provider.search(searchQuery);
       spinner.stop();
 
       if (results.length === 0) {
-        console.log(chalk.red(`❌ Nessun manga trovato per "${searchQuery}".`));
+        console.log(chalk.red(`❌ No manga found for "${searchQuery}".`));
         process.exit(0);
       }
 
-      // 2. Select Manga
-      const mangaChoices = results.slice(0, 30).map(m => ({
-        title: `${m.title} ${m.author ? chalk.dim(`(Autore: ${m.author})`) : ''}`,
-        description: m.genres ? chalk.dim(m.genres) : '',
+      // 2. Select Manga with Inquirer Autocomplete + Fixed Page Size Window
+      const mangaChoices = results.slice(0, 50).map(m => ({
+        name: `${m.title} ${m.author ? chalk.dim(`(Author: ${m.author})`) : ''}`,
         value: m
       }));
 
-      const mangaPrompt = await prompts({
-        type: 'autocomplete',
-        name: 'manga',
-        message: 'Seleziona un manga:',
-        choices: mangaChoices,
-        limit: 15
-      });
+      const mangaAnswer = await inquirer.prompt([
+        {
+          type: 'autocomplete',
+          name: 'manga',
+          message: 'Select a manga (type to filter):',
+          pageSize: 10,
+          source: async (answersSoFar, input) => {
+            if (!input) return mangaChoices;
+            const clean = input.toLowerCase();
+            return mangaChoices.filter(c => c.name.toLowerCase().includes(clean));
+          }
+        }
+      ]);
 
-      if (!mangaPrompt.manga) {
-        console.log(chalk.yellow('Nessun manga selezionato.'));
-        process.exit(0);
-      }
-
-      const selectedManga = mangaPrompt.manga;
+      const selectedManga = mangaAnswer.manga;
 
       // 3. Fetch Chapters
-      spinner.start(`Caricamento capitoli di ${selectedManga.title}...`);
+      spinner.start(`Loading chapters for ${selectedManga.title}...`);
       const chapters = await provider.getChapters(selectedManga.url);
       spinner.stop();
 
       if (chapters.length === 0) {
-        console.log(chalk.red('❌ Nessun capitolo disponibile per questo manga.'));
+        console.log(chalk.red('❌ No chapters available for this manga.'));
         process.exit(0);
       }
 
-      console.log(chalk.green(`✔ Trovati ${chapters.length} capitoli!\n`));
+      console.log(chalk.green(`✔ Found ${chapters.length} chapters!\n`));
 
       // Loop to allow reading consecutive chapters
       let currentChapters = chapters;
@@ -86,97 +86,103 @@ program
 
       while (keepReading) {
         const chapterChoices = currentChapters.map(c => ({
-          title: c.title,
+          name: c.title,
           value: c
         }));
 
-        const chapterPrompt = await prompts({
-          type: 'autocomplete',
-          name: 'chapter',
-          message: 'Seleziona il capitolo da leggere:',
-          choices: chapterChoices,
-          limit: 15
-        });
+        const chapterAnswer = await inquirer.prompt([
+          {
+            type: 'autocomplete',
+            name: 'chapter',
+            message: 'Select chapter to read (type to search):',
+            pageSize: 10,
+            source: async (answersSoFar, input) => {
+              if (!input) return chapterChoices;
+              const clean = input.toLowerCase();
+              return chapterChoices.filter(c => c.name.toLowerCase().includes(clean));
+            }
+          }
+        ]);
 
-        if (!chapterPrompt.chapter) {
-          console.log(chalk.yellow('Uscita dalla lettura.'));
-          break;
-        }
+        const selectedChapter = chapterAnswer.chapter;
 
-        const selectedChapter = chapterPrompt.chapter;
-
-        // 4. Extract pages
-        spinner.start(`Recupero pagine di "${selectedChapter.title}"...`);
+        // 4. Extract pages with fast parallel batch discovery
+        spinner.start(`Discovering pages for "${selectedChapter.title}"...`);
         const chapterData = await provider.getChapterPages(selectedChapter.url);
         spinner.stop();
 
         if (chapterData.pages.length === 0) {
-          console.log(chalk.red('❌ Impossibile trovare le pagine per questo capitolo.'));
+          console.log(chalk.red('❌ Unable to find pages for this chapter.'));
           continue;
         }
 
-        console.log(chalk.blue(`📥 Scaricamento di ${chapterData.pages.length} pagine in RAM (/dev/shm)...`));
+        console.log(chalk.blue(`⚡ Streaming ${chapterData.pages.length} pages in real time into RAM (/dev/shm)...`));
 
-        // 5. Download in RAM
+        // 5. Open reader instantly on page 1 and append all subsequent pages via IPC live streaming
         viewer.prepareChapterDir(selectedManga.title, selectedChapter.id);
-        const downloadSpinner = ora('Download pagine in corso: 0%').start();
+        const downloadSpinner = ora('Buffering page 1 (opening viewer)...').start();
 
-        const files = await viewer.downloadPages(
+        console.log(chalk.magenta('🚀 Reader opening instantly! (subsequent pages are being pushed live)'));
+        await viewer.streamAndRead(
           chapterData.pages,
           selectedChapter.url,
-          (done, total) => {
-            const percent = Math.round((done / total) * 100);
-            downloadSpinner.text = `Download pagine in RAM: ${percent}% (${done}/${total})`;
+          (done, total, isComplete) => {
+            if (!isComplete) {
+              downloadSpinner.text = `Live streaming to player: ${done}/${total} pages buffered`;
+            } else {
+              downloadSpinner.succeed(chalk.green(`All ${total} pages streamed into viewer!`));
+            }
           }
         );
 
-        downloadSpinner.succeed(chalk.green(`Pagine caricate in RAM con successo!`));
-
-        // 6. Open Reader
-        console.log(chalk.magenta('🚀 Apertura del lettore...'));
-        await viewer.openViewer(files);
-        console.log(chalk.green('✔ Capitolo terminato e cache RAM eliminata.\n'));
+        console.log(chalk.green('✔ Chapter finished and RAM cache cleared.\n'));
 
         // Ask for next action
         const currentIndex = currentChapters.findIndex(c => c.url === selectedChapter.url);
         const nextChapter = currentIndex + 1 < currentChapters.length ? currentChapters[currentIndex + 1] : null;
 
-        const nextAction = await prompts({
-          type: 'select',
-          name: 'action',
-          message: 'Cosa vuoi fare adesso?',
-          choices: [
-            ...(nextChapter ? [{ title: `⏩ Leggi capitolo successivo (${nextChapter.title})`, value: 'next' }] : []),
-            { title: '📑 Scegli un altro capitolo', value: 'choose' },
-            { title: '🚪 Esci', value: 'exit' }
-          ]
-        });
+        const nextActionChoices = [
+          ...(nextChapter ? [{ name: `⏩ Read next chapter (${nextChapter.title})`, value: 'next' }] : []),
+          { name: '📑 Choose another chapter', value: 'choose' },
+          { name: '🚪 Exit', value: 'exit' }
+        ];
 
-        if (nextAction.action === 'next' && nextChapter) {
-          // Select automatically the next one
-          spinner.start(`Recupero pagine di "${nextChapter.title}"...`);
+        const nextActionAnswer = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'action',
+            message: 'What would you like to do next?',
+            choices: nextActionChoices
+          }
+        ]);
+
+        if (nextActionAnswer.action === 'next' && nextChapter) {
+          spinner.start(`Discovering pages for "${nextChapter.title}"...`);
           const nextData = await provider.getChapterPages(nextChapter.url);
           spinner.stop();
 
           viewer.prepareChapterDir(selectedManga.title, nextChapter.id);
-          const dlSpin = ora('Download capitolo successivo in RAM...').start();
-          const nextFiles = await viewer.downloadPages(nextData.pages, nextChapter.url, (done, total) => {
-            dlSpin.text = `Download pagine in RAM: ${Math.round((done/total)*100)}% (${done}/${total})`;
+          const dlSpin = ora('Buffering page 1...').start();
+          console.log(chalk.magenta('🚀 Opening next chapter instantly!'));
+          await viewer.streamAndRead(nextData.pages, nextChapter.url, (done, total, isComplete) => {
+            if (isComplete) dlSpin.succeed(chalk.green(`All ${total} pages streamed into viewer!`));
           });
-          dlSpin.succeed(chalk.green('Pronto!'));
-          await viewer.openViewer(nextFiles);
-        } else if (nextAction.action === 'choose') {
+        } else if (nextActionAnswer.action === 'choose') {
           continue;
         } else {
           keepReading = false;
         }
       }
 
-      console.log(chalk.cyan('Grazie per aver usato manga-cli! A presto. 👋'));
+      console.log(chalk.cyan('Thank you for using manga-cli! See you next time. 👋'));
     } catch (err) {
-      console.error(chalk.red(`\nErrore imprevisto: ${err.message}`));
+      if (err.name === 'ExitPromptError') {
+        console.log(chalk.yellow('\nOperation cancelled.'));
+      } else {
+        console.error(chalk.red(`\nUnexpected error: ${err.message}`));
+      }
       viewer.cleanUp();
-      process.exit(1);
+      process.exit(0);
     }
   });
 

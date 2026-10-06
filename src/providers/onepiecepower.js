@@ -135,64 +135,97 @@ class OnePiecePowerProvider extends BaseProvider {
     const baseUrl = cleanUrl.split('reader/')[0];
     const rawCap = cleanUrl.split('reader/')[1].split('/')[0].split('.php')[0];
 
-    // Check if it's One Piece format: const vol = "099" + "/";
+    // Check if it's One Piece format: const vol = "099" + "/"; or "002" + "/";
     const opVolMatch = scriptContent.match(/const\s+vol\s*=\s*["']([^"']+)["']/);
     // Or standard format: const volText = "02";
     const stdVolMatch = scriptContent.match(/const\s+volText\s*=\s*["']([^"']+)["']/);
 
-    let getLinkFn;
+    let candidateGenerators = [];
+
     if (opVolMatch) {
-      const vol = opVolMatch[1].replace('/', '');
-      getLinkFn = (pageNum) => {
-        let capNum = rawCap.includes('-') 
-          ? rawCap.replace(/^0/, '') 
-          : (parseInt(rawCap, 10) < 10 ? rawCap.padStart(3, '0') : rawCap);
+      let rawVol = opVolMatch[1];
+      if (!rawVol.endsWith('/')) rawVol += '/';
+
+      let capWithSlash = rawCap.endsWith('/') ? rawCap : rawCap + '/';
+      let capNum = capWithSlash.includes('-') 
+        ? capWithSlash.replace(/^0/, '') 
+        : (parseInt(capWithSlash, 10) < 10 ? capWithSlash.padStart(3, '0') : capWithSlash);
+
+      candidateGenerators.push((pageNum) => {
         let p = pageNum < 10 ? '0' + pageNum : '' + pageNum;
-        return `${baseUrl}volume${vol}/${capNum}${p}.jpg`;
-      };
-    } else if (stdVolMatch) {
+        return `${baseUrl}volume${rawVol}${capNum}${p}.jpg`;
+      });
+    }
+
+    if (stdVolMatch) {
       const vol = stdVolMatch[1];
-      getLinkFn = (pageNum) => {
+      candidateGenerators.push((pageNum) => {
         let formattedCap = rawCap.includes('-') 
           ? rawCap.replace(/^0/, '') 
           : (parseFloat(rawCap) < 100 ? (rawCap.startsWith('0') ? rawCap.substring(1) : rawCap) : rawCap);
         let formattedPage = pageNum < 10 ? '0' + pageNum : '' + pageNum;
         return `${baseUrl}volume${vol}/capitolo${formattedCap}/${formattedPage}.jpg`;
-      };
-    } else {
-      // Fallback generator based on patterns
-      getLinkFn = (pageNum) => {
-        let p = pageNum < 10 ? '0' + pageNum : '' + pageNum;
-        return `${baseUrl}capitolo${rawCap}/${p}.jpg`;
-      };
+      });
     }
 
-    // Now test pages sequentially to find total available pages
-    const pages = [];
-    let pageNum = 1;
-    let keepChecking = true;
+    // Fallbacks
+    candidateGenerators.push((pageNum) => {
+      let p = pageNum < 10 ? '0' + pageNum : '' + pageNum;
+      return `${baseUrl}volume${rawCap}/capitolo${rawCap}/${p}.jpg`;
+    });
+    candidateGenerators.push((pageNum) => {
+      let p = pageNum < 10 ? '0' + pageNum : '' + pageNum;
+      return `${baseUrl}capitolo${rawCap}/${p}.jpg`;
+    });
 
-    while (keepChecking && pageNum <= 150) {
-      const testUrl = getLinkFn(pageNum);
-      const exists = await checkUrlExists(testUrl, chapterUrl);
+    // Detect which generator actually works on page 1
+    let workingGenerator = null;
+    for (const gen of candidateGenerators) {
+      const testPage1 = gen(1);
+      const exists = await checkUrlExists(testPage1, chapterUrl);
       if (exists) {
-        pages.push(testUrl);
-        pageNum++;
-      } else {
-        keepChecking = false;
+        workingGenerator = gen;
+        break;
       }
     }
 
-    if (pages.length === 0) {
-      pages.push(getLinkFn(1));
+    if (!workingGenerator) {
+      workingGenerator = candidateGenerators[0];
+    }
+
+    // Fast batched parallel discovery (10 pages per batch)
+    const pages = [];
+    let current = 1;
+    let keepChecking = true;
+    const batchSize = 10;
+
+    while (keepChecking && current <= 150) {
+      const batchNumbers = Array.from({ length: batchSize }, (_, i) => current + i);
+      const batchUrls = batchNumbers.map(n => workingGenerator(n));
+
+      const batchResults = await Promise.all(
+        batchUrls.map(url => checkUrlExists(url, chapterUrl))
+      );
+
+      for (let i = 0; i < batchResults.length; i++) {
+        if (batchResults[i]) {
+          pages.push(batchUrls[i]);
+        } else {
+          keepChecking = false;
+          break;
+        }
+      }
+
+      current += batchSize;
     }
 
     const title = $('title').text().replace(/\|.*$/, '').trim();
 
     return {
-      title: title || `Capitolo ${rawCap}`,
+      title: title || `Chapter ${rawCap}`,
       chapterUrl,
-      pages
+      pages,
+      getPageLinkFn: workingGenerator
     };
   }
 }
