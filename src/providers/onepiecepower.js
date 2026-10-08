@@ -153,7 +153,7 @@ class OnePiecePowerProvider extends BaseProvider {
     // Or standard format: const volText = "02";
     const stdVolMatch = scriptContent.match(/const\s+volText\s*=\s*["']([^"']+)["']/);
 
-    let candidateGenerators = [];
+    let workingGenerator = null;
 
     if (opVolMatch) {
       let rawVol = opVolMatch[1];
@@ -164,80 +164,33 @@ class OnePiecePowerProvider extends BaseProvider {
         ? capWithSlash.replace(/^0/, '') 
         : (parseInt(capWithSlash, 10) < 10 ? capWithSlash.padStart(3, '0') : capWithSlash);
 
-      candidateGenerators.push((pageNum) => {
+      workingGenerator = (pageNum) => {
         let p = pageNum < 10 ? '0' + pageNum : '' + pageNum;
         return `${baseUrl}volume${rawVol}${capNum}${p}.jpg`;
-      });
-    }
-
-    if (stdVolMatch) {
+      };
+    } else if (stdVolMatch) {
       const vol = stdVolMatch[1];
-      candidateGenerators.push((pageNum) => {
-        let formattedCap = rawCap.includes('-') 
-          ? rawCap.replace(/^0/, '') 
-          : (parseFloat(rawCap) < 100 ? (rawCap.startsWith('0') ? rawCap.substring(1) : rawCap) : rawCap);
+      let formattedCap = rawCap.includes('-') 
+        ? rawCap.replace(/^0/, '') 
+        : (parseFloat(rawCap) < 100 ? (rawCap.startsWith('0') ? rawCap.substring(1) : rawCap) : rawCap);
+
+      workingGenerator = (pageNum) => {
         let formattedPage = pageNum < 10 ? '0' + pageNum : '' + pageNum;
         return `${baseUrl}volume${vol}/capitolo${formattedCap}/${formattedPage}.jpg`;
-      });
-      // Also candidate for non-italian capitolo folder
-      candidateGenerators.push((pageNum) => {
-        let formattedCap = rawCap.includes('-') 
-          ? rawCap.replace(/^0/, '') 
-          : (parseFloat(rawCap) < 100 ? (rawCap.startsWith('0') ? rawCap.substring(1) : rawCap) : rawCap);
-        let formattedPage = pageNum < 10 ? '0' + pageNum : '' + pageNum;
-        return `${baseUrl}volume${vol}/chapter${formattedCap}/${formattedPage}.jpg`;
-      });
-    }
-
-    // Fallbacks
-    candidateGenerators.push((pageNum) => {
-      let p = pageNum < 10 ? '0' + pageNum : '' + pageNum;
-      return `${baseUrl}volume${rawCap}/capitolo${rawCap}/${p}.jpg`;
-    });
-    candidateGenerators.push((pageNum) => {
-      let p = pageNum < 10 ? '0' + pageNum : '' + pageNum;
-      return `${baseUrl}capitolo${rawCap}/${p}.jpg`;
-    });
-
-    // Detect which generator actually works on page 1
-    let workingGenerator = null;
-    for (const gen of candidateGenerators) {
-      const testPage1 = gen(1);
-      const exists = await checkUrlExists(testPage1, chapterUrl);
-      if (exists) {
-        workingGenerator = gen;
-        break;
-      }
-    }
-
-    if (!workingGenerator) {
-      workingGenerator = candidateGenerators[0];
-    }
-
-    // Fast batched parallel discovery (10 pages per batch)
-    const pages = [];
-    let current = 1;
-    let keepChecking = true;
-    const batchSize = 10;
-
-    while (keepChecking && current <= 150) {
-      const batchNumbers = Array.from({ length: batchSize }, (_, i) => current + i);
-      const batchUrls = batchNumbers.map(n => workingGenerator(n));
-
-      const batchResults = await Promise.all(
-        batchUrls.map(url => checkUrlExists(url, chapterUrl))
-      );
-
-      for (let i = 0; i < batchResults.length; i++) {
-        if (batchResults[i]) {
-          pages.push(batchUrls[i]);
-        } else {
-          keepChecking = false;
+      };
+    } else {
+      // Fallbacks only if script variables are missing
+      const fallbacks = [
+        (p) => `${baseUrl}volume${rawCap}/capitolo${rawCap}/${p < 10 ? '0' + p : p}.jpg`,
+        (p) => `${baseUrl}capitolo${rawCap}/${p < 10 ? '0' + p : p}.jpg`
+      ];
+      for (const gen of fallbacks) {
+        if (await checkUrlExists(gen(1), chapterUrl)) {
+          workingGenerator = gen;
           break;
         }
       }
-
-      current += batchSize;
+      if (!workingGenerator) workingGenerator = fallbacks[0];
     }
 
     const title = $('title').text().replace(/\|.*$/, '').trim();
@@ -245,8 +198,38 @@ class OnePiecePowerProvider extends BaseProvider {
     return {
       title: title || `Chapter ${rawCap}`,
       chapterUrl,
-      pages,
-      getPageLinkFn: workingGenerator
+      // Provide instant page 1 without waiting for full batch scans
+      page1: workingGenerator(1),
+      getPageLinkFn: workingGenerator,
+      // Helper function to quickly discover all pages in background
+      discoverRemainingPages: async () => {
+        const pages = [workingGenerator(1)];
+        let current = 2;
+        let keepChecking = true;
+        const batchSize = 15;
+
+        while (keepChecking && current <= 100) {
+          const batchNumbers = Array.from({ length: batchSize }, (_, i) => current + i);
+          const batchUrls = batchNumbers.map(n => workingGenerator(n));
+
+          const batchResults = await Promise.all(
+            batchUrls.map(url => checkUrlExists(url, chapterUrl))
+          );
+
+          for (let i = 0; i < batchResults.length; i++) {
+            if (batchResults[i]) {
+              pages.push(batchUrls[i]);
+            } else {
+              keepChecking = false;
+              break;
+            }
+          }
+
+          current += batchSize;
+        }
+
+        return pages;
+      }
     };
   }
 }

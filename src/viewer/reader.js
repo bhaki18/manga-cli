@@ -76,13 +76,13 @@ class MangaViewer {
    * Open reader instantly on page 1, streaming and appending pages in real time
    */
   async streamAndRead(pages, referer, onProgress) {
-    if (!this.activeDir) throw new Error('RAM directory not initialized');
-    const total = pages.length;
-    const viewerType = await this.detectViewer();
+    // Resolve page1 immediately
+    let page1Url = Array.isArray(pages) ? pages[0] : (pages.page1 || (pages.pages && pages.pages[0]));
+    if (!page1Url) throw new Error('No pages found for this chapter');
 
     // 1. Download PAGE 1 first so reader opens in < 1s
-    const page1Path = await this.downloadSinglePage(pages[0], 1, referer);
-    if (onProgress) onProgress(1, total, false);
+    const page1Path = await this.downloadSinglePage(page1Url, 1, referer);
+    if (onProgress) onProgress(1, Array.isArray(pages) ? pages.length : 1, false);
 
     let viewerProc;
 
@@ -104,7 +104,7 @@ class MangaViewer {
             });
             client.on('error', () => {});
           }
-        }, 50);
+        }, 30);
       });
 
       const ipc = await connectIpc();
@@ -121,11 +121,22 @@ class MangaViewer {
 
       // Background parallel downloads injected into MPV playlist
       (async () => {
-        const concurrency = 6;
+        let fullPagesList = [];
+        if (Array.isArray(pages)) {
+          fullPagesList = pages;
+        } else if (typeof pages.discoverRemainingPages === 'function') {
+          fullPagesList = await pages.discoverRemainingPages();
+        } else if (Array.isArray(pages.pages)) {
+          fullPagesList = pages.pages;
+        }
+
+        const total = fullPagesList.length;
+        const concurrency = 10;
         let completed = 1;
+
         for (let i = 1; i < total; i += concurrency) {
           if (!this.activeDir) break;
-          const chunk = pages.slice(i, i + concurrency);
+          const chunk = fullPagesList.slice(i, i + concurrency);
           const downloadedChunk = await Promise.all(
             chunk.map(async (url, idx) => {
               const pageIndex = i + idx + 1;
@@ -167,11 +178,22 @@ class MangaViewer {
 
       // Background download all remaining pages into the directory
       (async () => {
-        const concurrency = 6;
+        let fullPagesList = [];
+        if (Array.isArray(pages)) {
+          fullPagesList = pages;
+        } else if (typeof pages.discoverRemainingPages === 'function') {
+          fullPagesList = await pages.discoverRemainingPages();
+        } else if (Array.isArray(pages.pages)) {
+          fullPagesList = pages.pages;
+        }
+
+        const total = fullPagesList.length;
+        const concurrency = 10;
         let completed = 1;
+
         for (let i = 1; i < total; i += concurrency) {
           if (!this.activeDir) break;
-          const chunk = pages.slice(i, i + concurrency);
+          const chunk = fullPagesList.slice(i, i + concurrency);
           await Promise.all(
             chunk.map(async (url, idx) => {
               const pageIndex = i + idx + 1;

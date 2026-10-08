@@ -202,12 +202,13 @@ program
           continue;
         }
 
-        if (!chapterData.pages || chapterData.pages.length === 0) {
+        const hasPages = (chapterData.pages && chapterData.pages.length > 0) || chapterData.page1;
+        if (!hasPages) {
           console.log(chalk.red('❌ Unable to find pages for this chapter.'));
           continue;
         }
 
-        console.log(chalk.blue(`⚡ Streaming ${chapterData.pages.length} pages in real time into RAM (/dev/shm)...`));
+        console.log(chalk.blue('⚡ Streaming chapter in real time into RAM (/dev/shm)...'));
 
         // 5. Open reader instantly on page 1 and append all subsequent pages
         viewer.prepareChapterDir(selectedManga.title, selectedChapter.id);
@@ -215,7 +216,7 @@ program
 
         console.log(chalk.magenta('🚀 Reader opening instantly! (subsequent pages are being pushed live)'));
         await viewer.streamAndRead(
-          chapterData.pages,
+          chapterData.pages || chapterData,
           selectedChapter.url,
           (done, total, isComplete) => {
             if (!isComplete) {
@@ -260,7 +261,7 @@ program
           viewer.prepareChapterDir(selectedManga.title, nextChapter.id);
           const dlSpin = ora('Buffering page 1...').start();
           console.log(chalk.magenta('🚀 Opening next chapter instantly!'));
-          await viewer.streamAndRead(nextData.pages, nextChapter.url, (done, total, isComplete) => {
+          await viewer.streamAndRead(nextData.pages || nextData, nextChapter.url, (done, total, isComplete) => {
             if (isComplete) dlSpin.succeed(chalk.green(`All ${total} pages streamed into viewer!`));
           });
         } else if (nextActionAnswer.action === 'choose') {

@@ -46,14 +46,16 @@ async function fetchJson(url, referer = null) {
 }
 
 /**
- * Check if a URL exists (HTTP 200) via curl HEAD request
+ * Check if a URL exists (HTTP 200) via fast curl HEAD request
  */
 function checkUrlExists(url, referer = null) {
   return new Promise((resolve) => {
     const args = [
       '-s',
+      '-g',
       '-I',
-      '--doh-url', DOH_RESOLVER,
+      '--connect-timeout', '3',
+      '-m', '5',
       '-A', DEFAULT_USER_AGENT,
     ];
     if (referer) {
@@ -63,21 +65,22 @@ function checkUrlExists(url, referer = null) {
 
     execFile('curl', args, (err, stdout) => {
       if (err) return resolve(false);
-      const is200 = stdout.includes('200 OK') || stdout.includes('HTTP/2 200');
+      const is200 = stdout && (stdout.includes('200 OK') || stdout.includes('HTTP/2 200') || stdout.includes('HTTP/1.1 200'));
       resolve(is200);
     });
   });
 }
 
 /**
- * Download a file/image directly to destination path
+ * Download a file/image directly to destination path with fast direct connection
  */
 function downloadToFile(url, destPath, referer = null) {
   return new Promise((resolve, reject) => {
     const args = [
       '-s',
+      '-g',
       '-L',
-      '--doh-url', DOH_RESOLVER,
+      '--connect-timeout', '5',
       '-A', DEFAULT_USER_AGENT,
       '-o', destPath
     ];
