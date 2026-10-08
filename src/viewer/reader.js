@@ -84,6 +84,7 @@ class MangaViewer {
     const page1Path = await this.downloadSinglePage(page1Url, 1, referer);
     if (onProgress) onProgress(1, Array.isArray(pages) ? pages.length : 1, false);
 
+    const viewerType = await this.detectViewer();
     let viewerProc;
 
     if (viewerType === 'mpv') {
