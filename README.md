@@ -13,6 +13,7 @@
 - 🔍 **Interactive Search & Paged Navigation**: Fixed-viewport menu navigation (`pageSize: 10`) ensures your active selection is always clearly visible. Type to filter through 1,200+ chapters effortlessly.
 - 🖼️ **Multi-Viewer Support**: Seamless integration with your favourite graphical viewer (`mpv` via IPC socket, `feh` via inotify auto-reload, `sxiv`, `imv`, or `loupe`).
 - ⏭️ **Continuous Reading**: Instantly jump to the next chapter at the press of a key once finished.
+- ✅ **Read Chapters Tracker**: Displays a green `[✓]` mark beside chapters you have already read so you never lose track.
 
 ---
 
@@ -75,6 +76,7 @@ manga-cli
 manga-cli "one piece" --lang it      # Italian scans
 manga-cli "one piece" --lang en      # English scans
 manga-cli "berserk"                  # Global search (shows [ITA] and [ENG] badges)
+manga-cli -D                         # Clear read chapters history
 ```
 
 ---

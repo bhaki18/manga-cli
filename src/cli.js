@@ -10,6 +10,7 @@ const MangaDexProvider = require('./providers/mangadex');
 const MangapillProvider = require('./providers/mangapill');
 const MangaViewer = require('./viewer/reader');
 const { LANGUAGES, getLanguageName, getLanguageFlag } = require('./utils/languages');
+const { isChapterRead, markChapterRead, clearHistory } = require('./utils/history');
 
 // Register autocomplete prompt in inquirer
 inquirer.registerPrompt('autocomplete', require('inquirer-autocomplete-prompt'));
@@ -26,8 +27,15 @@ program
   .version('1.1.0')
   .argument('[query]', 'Search manga by title')
   .option('-l, --lang <language>', 'Filter by scan language code (e.g. it, en, es, fr, ja)', null)
+  .option('-D, --delete', 'Clear read chapters history')
   .action(async (query, options) => {
     try {
+      if (options.delete) {
+        clearHistory();
+        console.log(chalk.green('✔ Read chapters history deleted successfully.'));
+        process.exit(0);
+      }
+
       console.log(chalk.bold.cyan('\n  📖 MANGA CLI - Universal Terminal Manga Reader\n'));
 
       // 0. Language Selection
@@ -134,6 +142,8 @@ program
       ]);
 
       const selectedManga = mangaAnswer.manga;
+      const mangaKey = (selectedManga.url || selectedManga.id || selectedManga.title).toLowerCase().trim();
+
       let chosenProvider = oppProvider;
       if (selectedManga.source === 'mangadex') {
         chosenProvider = mdProvider;
@@ -158,10 +168,14 @@ program
       let keepReading = true;
 
       while (keepReading) {
-        const chapterChoices = currentChapters.map(c => ({
-          name: c.title,
-          value: c
-        }));
+        const chapterChoices = currentChapters.map(c => {
+          const isRead = isChapterRead(mangaKey, c.id, c.url);
+          const badge = isRead ? chalk.green(' [✓]') : '';
+          return {
+            name: `${c.title}${badge}`,
+            value: c
+          };
+        });
 
         const chapterAnswer = await inquirer.prompt([
           {
@@ -177,7 +191,7 @@ program
           }
         ]);
 
-        const selectedChapter = chapterAnswer.chapter;
+        let selectedChapter = chapterAnswer.chapter;
 
         // 4. Extract pages
         spinner.start(`Discovering pages for "${selectedChapter.title}"...`);
@@ -197,6 +211,7 @@ program
           ]);
           if (openAns.openWeb) {
             spawn('xdg-open', [chapterData.externalUrl], { stdio: 'ignore' });
+            markChapterRead(mangaKey, selectedManga.title, selectedChapter);
             console.log(chalk.green('Opened in browser!'));
           }
           continue;
@@ -227,47 +242,57 @@ program
           }
         );
 
+        markChapterRead(mangaKey, selectedManga.title, selectedChapter);
         console.log(chalk.green('✔ Chapter finished and RAM cache cleared.\n'));
 
-        // Ask for next action
-        const currentIndex = currentChapters.findIndex(c => c.url === selectedChapter.url);
-        const nextChapter = currentIndex + 1 < currentChapters.length ? currentChapters[currentIndex + 1] : null;
+        // Continuous reading loop for consecutive "next" actions
+        let inSubLoop = true;
+        while (inSubLoop) {
+          const currentIndex = currentChapters.findIndex(c => c.url === selectedChapter.url);
+          const nextChapter = currentIndex + 1 < currentChapters.length ? currentChapters[currentIndex + 1] : null;
 
-        const nextActionChoices = [
-          ...(nextChapter ? [{ name: `⏩ Read next chapter (${nextChapter.title})`, value: 'next' }] : []),
-          { name: '📑 Choose another chapter', value: 'choose' },
-          { name: '🚪 Exit', value: 'exit' }
-        ];
+          const nextActionChoices = [
+            ...(nextChapter ? [{ name: `⏩ Read next chapter (${nextChapter.title})`, value: 'next' }] : []),
+            { name: '📑 Choose another chapter', value: 'choose' },
+            { name: '🚪 Exit', value: 'exit' }
+          ];
 
-        const nextActionAnswer = await inquirer.prompt([
-          {
-            type: 'list',
-            name: 'action',
-            message: 'What would you like to do next?',
-            choices: nextActionChoices
+          const nextActionAnswer = await inquirer.prompt([
+            {
+              type: 'list',
+              name: 'action',
+              message: 'What would you like to do next?',
+              choices: nextActionChoices
+            }
+          ]);
+
+          if (nextActionAnswer.action === 'next' && nextChapter) {
+            spinner.start(`Discovering pages for "${nextChapter.title}"...`);
+            const nextData = await chosenProvider.getChapterPages(nextChapter.url);
+            spinner.stop();
+
+            if (nextData.externalUrl) {
+              spawn('xdg-open', [nextData.externalUrl], { stdio: 'ignore' });
+              markChapterRead(mangaKey, selectedManga.title, nextChapter);
+              selectedChapter = nextChapter;
+              continue;
+            }
+
+            viewer.prepareChapterDir(selectedManga.title, nextChapter.id);
+            const dlSpin = ora('Buffering page 1...').start();
+            console.log(chalk.magenta('🚀 Opening next chapter instantly!'));
+            await viewer.streamAndRead(nextData.pages || nextData, nextChapter.url, (done, total, isComplete) => {
+              if (isComplete) dlSpin.succeed(chalk.green(`All ${total} pages streamed into viewer!`));
+            });
+
+            markChapterRead(mangaKey, selectedManga.title, nextChapter);
+            selectedChapter = nextChapter;
+          } else if (nextActionAnswer.action === 'choose') {
+            inSubLoop = false;
+          } else {
+            inSubLoop = false;
+            keepReading = false;
           }
-        ]);
-
-        if (nextActionAnswer.action === 'next' && nextChapter) {
-          spinner.start(`Discovering pages for "${nextChapter.title}"...`);
-          const nextData = await chosenProvider.getChapterPages(nextChapter.url);
-          spinner.stop();
-
-          if (nextData.externalUrl) {
-            spawn('xdg-open', [nextData.externalUrl], { stdio: 'ignore' });
-            continue;
-          }
-
-          viewer.prepareChapterDir(selectedManga.title, nextChapter.id);
-          const dlSpin = ora('Buffering page 1...').start();
-          console.log(chalk.magenta('🚀 Opening next chapter instantly!'));
-          await viewer.streamAndRead(nextData.pages || nextData, nextChapter.url, (done, total, isComplete) => {
-            if (isComplete) dlSpin.succeed(chalk.green(`All ${total} pages streamed into viewer!`));
-          });
-        } else if (nextActionAnswer.action === 'choose') {
-          continue;
-        } else {
-          keepReading = false;
         }
       }
 
