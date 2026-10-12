@@ -24,7 +24,7 @@ const viewer = new MangaViewer();
 program
   .name('manga-cli')
   .description('Terminal CLI to read manga online with RAM caching and 30+ language support')
-  .version('1.2.0')
+  .version('1.3.0')
   .argument('[query]', 'Search manga by title')
   .option('-l, --lang <language>', 'Filter by scan language code (e.g. it, en, es, fr, ja)', null)
   .option('-c, --continue', 'Automatically continue reading from the next unread chapter (or latest read if at the end)')
