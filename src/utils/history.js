@@ -54,12 +54,15 @@ function isChapterRead(mangaKey, chapterId, chapterUrl) {
   });
 }
 
-function markChapterRead(mangaKey, mangaTitle, chapter) {
+function markChapterRead(mangaKey, mangaTitle, chapter, mangaMetadata = {}) {
   if (!mangaKey || !chapter) return;
   const history = loadHistory();
   if (!history[mangaKey]) {
     history[mangaKey] = {
       title: mangaTitle || mangaKey,
+      url: mangaMetadata.url || mangaKey,
+      source: mangaMetadata.source || null,
+      language: mangaMetadata.language || null,
       lastReadAt: new Date().toISOString(),
       readChapters: []
     };
@@ -67,6 +70,9 @@ function markChapterRead(mangaKey, mangaTitle, chapter) {
 
   history[mangaKey].lastReadAt = new Date().toISOString();
   history[mangaKey].title = mangaTitle || history[mangaKey].title;
+  if (mangaMetadata.url) history[mangaKey].url = mangaMetadata.url;
+  if (mangaMetadata.source) history[mangaKey].source = mangaMetadata.source;
+  if (mangaMetadata.language) history[mangaKey].language = mangaMetadata.language;
 
   const chapterId = String(chapter.id || '').trim();
   const chapterUrl = String(chapter.url || '').trim();
@@ -91,6 +97,87 @@ function markChapterRead(mangaKey, mangaTitle, chapter) {
   saveHistory(history);
 }
 
+function getLastReadManga() {
+  const history = loadHistory();
+  const entries = Object.entries(history);
+  if (entries.length === 0) return null;
+
+  // Sort descending by lastReadAt
+  entries.sort((a, b) => {
+    const timeA = new Date(a[1].lastReadAt || 0).getTime();
+    const timeB = new Date(b[1].lastReadAt || 0).getTime();
+    return timeB - timeA;
+  });
+
+  const [mangaKey, mangaData] = entries[0];
+  if (!mangaData.readChapters || mangaData.readChapters.length === 0) {
+    return null;
+  }
+
+  return {
+    mangaKey,
+    ...mangaData
+  };
+}
+
+
+function getLastReadChapter(mangaKey) {
+  if (!mangaKey) return null;
+  const history = loadHistory();
+  const manga = history[mangaKey];
+  if (!manga || !Array.isArray(manga.readChapters) || manga.readChapters.length === 0) {
+    return null;
+  }
+  return manga.readChapters[manga.readChapters.length - 1];
+}
+
+/**
+ * Finds the chapter that comes immediately after the last read chapter in the chapter list.
+ * If the last read chapter was the very last one (or no next chapter exists),
+ * it returns the last read chapter itself.
+ * If nothing was read or no match is found, returns null.
+ */
+function getNextChapterToRead(mangaKey, chapters) {
+  if (!mangaKey || !Array.isArray(chapters) || chapters.length === 0) return null;
+  const lastRead = getLastReadChapter(mangaKey);
+  if (!lastRead) return null;
+
+  const lastId = String(lastRead.id || '').trim();
+  const lastUrl = String(lastRead.url || '').trim();
+
+  // Find index of the last read chapter in the provided chapter list
+  const lastIdx = chapters.findIndex(c => {
+    const cId = String(c.id || '').trim();
+    const cUrl = String(c.url || '').trim();
+    return (lastId && cId === lastId) || (lastUrl && cUrl === lastUrl);
+  });
+
+  if (lastIdx === -1) {
+    // If exact chapter is not found by ID/URL, look at all read chapters and take the highest index
+    let highestIdx = -1;
+    for (let i = 0; i < chapters.length; i++) {
+      if (isChapterRead(mangaKey, chapters[i].id, chapters[i].url)) {
+        highestIdx = i;
+      }
+    }
+    if (highestIdx !== -1) {
+      if (highestIdx + 1 < chapters.length) {
+        return { chapter: chapters[highestIdx + 1], isNext: true, prevChapter: chapters[highestIdx] };
+      }
+      return { chapter: chapters[highestIdx], isNext: false, prevChapter: chapters[highestIdx] };
+    }
+    return null;
+  }
+
+  // Next chapter exists?
+  if (lastIdx + 1 < chapters.length) {
+    return { chapter: chapters[lastIdx + 1], isNext: true, prevChapter: chapters[lastIdx] };
+  }
+
+  // Otherwise stay on the last read chapter
+  return { chapter: chapters[lastIdx], isNext: false, prevChapter: chapters[lastIdx] };
+}
+
 function clearHistory() {
   try {
     if (fs.existsSync(HISTORY_FILE)) {
@@ -103,6 +190,11 @@ module.exports = {
   isChapterRead,
   markChapterRead,
   loadHistory,
+  getLastReadManga,
+  getLastReadChapter,
+  getNextChapterToRead,
   clearHistory,
   HISTORY_FILE
 };
+
+

@@ -76,8 +76,10 @@ manga-cli
 manga-cli "one piece" --lang it      # Italian scans
 manga-cli "one piece" --lang en      # English scans
 manga-cli "berserk"                  # Global search (shows [ITA] and [ENG] badges)
+manga-cli "one piece" -c             # Resume next unread chapter (or latest if completed)
 manga-cli -D                         # Clear read chapters history
 ```
+
 
 ---
 
