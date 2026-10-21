@@ -184,6 +184,10 @@ manga-cli "one piece" -m --set-chapter 1050
 anime-cli "one piece" --set-episode 1071
 manga-cli "dr. stone" -a --set-episode 15
 
+# Directly unmark a chapter or episode
+anime-cli "dr. stone" --unmark 10
+manga-cli "berserk" -m --unmark 92
+
 # Remove a specific title from history
 manga-cli "berserk" --remove-history
 anime-cli "one piece" --remove-history
@@ -194,7 +198,10 @@ When you open `manga-cli -H` and pick a title, you can:
 - ▶️ **Resume reading / watching** from your saved position.
 - ✏️ **Set last episode/chapter number manually** to update your progress.
 - ✅ **Mark all episodes/chapters up to number N as read/watched** in one step.
-- ❌ **Unmark specific episodes/chapters** using an interactive multi-select checklist (spacebar to select).
+- ❌ **Unmark specific episodes/chapters**:
+  - ⏪ *Unmark only latest* (removes the latest watched/read item in 1 click)
+  - 🔢 *Enter number(s) directly* (e.g. `10` or `5, 8, 12` to remove instantly)
+  - 📋 *Select from checklist* (sorted newest first with spacebar selection)
 - 🗑️ **Remove this title from history**.
 
 
@@ -252,6 +259,7 @@ manga-cli -m -D      # Delete only read manga history
 | `--edit-history` | Open interactive history manager & progress editor |
 | `--set-chapter <num\>` | Directly set last read manga chapter progress |
 | `--set-episode <num\>` | Directly set last watched anime episode progress |
+| `--unmark <num\>` | Unmark/remove specific chapter or episode from history |
 | `--remove-history` | Remove specified title from reading/watching history |
 | `-r, --random` | Pick and open a random manga or anime title |
 | `-i, --info` | Display title metadata and total chapters/episodes without opening player |

@@ -35,6 +35,7 @@ const {
   unmarkEpisode,
   markAllMangaChaptersUpTo,
   markAllAnimeEpisodesUpTo,
+  extractNumber,
   loadHistory
 } = require('./utils/history');
 
@@ -79,6 +80,7 @@ program
   // History editing & management
   .option('--set-chapter <number>', 'Set last read manga chapter progress directly')
   .option('--set-episode <number>', 'Set last watched anime episode progress directly')
+  .option('--unmark <number>', 'Unmark/remove specific chapter or episode from history (e.g. --unmark 10)')
   .option('--remove-history', 'Remove specified title from reading/watch history')
   .option('--edit-history', 'Open interactive history editor and progress manager')
   // Player & Viewer options
@@ -192,6 +194,34 @@ program
 
         setAnimeProgress(target, target, epNum);
         console.log(chalk.green(`✔ Anime progress updated: "${target}" set to Episode ${epNum}!`));
+        process.exit(0);
+      }
+
+      // Direct command to unmark chapter or episode
+      if (options.unmark) {
+        const target = query || process.argv[3];
+        if (!target) {
+          console.log(chalk.red('❌ Please specify a title to unmark from (e.g. anime-cli "dr. stone" --unmark 10)'));
+          process.exit(1);
+        }
+        const isAnimeBinary = path.basename(process.argv[1] || '').includes('anime');
+        const isAnimeTarget = options.anime || isAnimeBinary;
+        let count = 0;
+        if (isAnimeTarget) {
+          count = unmarkEpisode(target, options.unmark);
+          if (count > 0) {
+            console.log(chalk.green(`✔ Unmarked episode ${options.unmark} from "${target}".`));
+          } else {
+            console.log(chalk.yellow(`ℹ️ Episode ${options.unmark} not found in history for "${target}".`));
+          }
+        } else {
+          count = unmarkChapter(target, options.unmark);
+          if (count > 0) {
+            console.log(chalk.green(`✔ Unmarked chapter ${options.unmark} from "${target}".`));
+          } else {
+            console.log(chalk.yellow(`ℹ️ Chapter ${options.unmark} not found in history for "${target}".`));
+          }
+        }
         process.exit(0);
       }
 
@@ -512,30 +542,85 @@ async function handleHistoryFlow(options) {
         continue;
       }
 
-      const unmarkChoices = itemsList.map(e => ({
-        name: e.title || (isAnime ? `Episodio ${e.id}` : `Capitolo ${e.id}`),
-        value: e.id || e.url
-      }));
+      // Sort items descending so the latest are on top
+      const sortedItems = [...itemsList].sort((a, b) => {
+        const nA = extractNumber(a.id) || extractNumber(a.title) || 0;
+        const nB = extractNumber(b.id) || extractNumber(b.title) || 0;
+        return nB - nA;
+      });
 
-      const unmarkPrompt = await inquirer.prompt([
+      const latestItem = sortedItems[0];
+      const latestLabel = latestItem.title || (isAnime ? `Episodio ${latestItem.id}` : `Capitolo ${latestItem.id}`);
+
+      const unmarkMethod = await inquirer.prompt([
         {
-          type: 'checkbox',
-          name: 'toRemove',
-          message: `Select ${isAnime ? 'episodes' : 'chapters'} to remove from history (use spacebar):`,
-          choices: unmarkChoices,
-          pageSize: 12
+          type: 'list',
+          name: 'mode',
+          message: `How would you like to unmark ${isAnime ? 'episodes' : 'chapters'} from "${item.title}"?`,
+          choices: [
+            { name: `⏪ Unmark only latest (${latestLabel})`, value: 'latest' },
+            { name: `🔢 Enter ${isAnime ? 'episode' : 'chapter'} number(s) directly (e.g. 10 or 5, 8, 12)`, value: 'by_number' },
+            { name: `📋 Select from checklist (Spunta gli elementi da rimuovere)`, value: 'checklist' },
+            { name: '↩️  Cancel (Annulla)', value: 'cancel' }
+          ]
         }
       ]);
 
-      if (unmarkPrompt.toRemove && unmarkPrompt.toRemove.length > 0) {
-        unmarkPrompt.toRemove.forEach(idOrUrl => {
-          if (isAnime) {
-            unmarkEpisode(item.storageKey || item.key, idOrUrl);
-          } else {
-            unmarkChapter(item.storageKey || item.key, idOrUrl);
+      if (unmarkMethod.mode === 'cancel') {
+        continue;
+      }
+
+      let removedCount = 0;
+
+      if (unmarkMethod.mode === 'latest') {
+        if (isAnime) {
+          removedCount = unmarkEpisode(item.storageKey || item.key, latestItem);
+        } else {
+          removedCount = unmarkChapter(item.storageKey || item.key, latestItem);
+        }
+        if (removedCount > 0) {
+          console.log(chalk.green(`✔ Unmarked latest item: "${latestLabel}"!\n`));
+        }
+      } else if (unmarkMethod.mode === 'by_number') {
+        const numPrompt = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'nums',
+            message: `Enter ${isAnime ? 'episode' : 'chapter'} number(s) to unmark (comma-separated, e.g. 10 or 5, 8, 12):`,
+            validate: val => val.trim().length > 0 ? true : 'Please enter at least one number'
           }
-        });
-        console.log(chalk.green(`✔ Removed ${unmarkPrompt.toRemove.length} ${isAnime ? 'episodes' : 'chapters'} from history.\n`));
+        ]);
+        const numParts = numPrompt.nums.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+        if (isAnime) {
+          removedCount = unmarkEpisode(item.storageKey || item.key, numParts);
+        } else {
+          removedCount = unmarkChapter(item.storageKey || item.key, numParts);
+        }
+        console.log(chalk.green(`✔ Removed ${removedCount} ${isAnime ? 'episodes' : 'chapters'} from history.\n`));
+      } else if (unmarkMethod.mode === 'checklist') {
+        const unmarkChoices = sortedItems.map(e => ({
+          name: e.title || (isAnime ? `Episodio ${e.id}` : `Capitolo ${e.id}`),
+          value: e
+        }));
+
+        const unmarkPrompt = await inquirer.prompt([
+          {
+            type: 'checkbox',
+            name: 'toRemove',
+            message: `Select ${isAnime ? 'episodes' : 'chapters'} to remove from history (spacebar to select):`,
+            choices: unmarkChoices,
+            pageSize: 14
+          }
+        ]);
+
+        if (unmarkPrompt.toRemove && unmarkPrompt.toRemove.length > 0) {
+          if (isAnime) {
+            removedCount = unmarkEpisode(item.storageKey || item.key, unmarkPrompt.toRemove);
+          } else {
+            removedCount = unmarkChapter(item.storageKey || item.key, unmarkPrompt.toRemove);
+          }
+          console.log(chalk.green(`✔ Removed ${removedCount} ${isAnime ? 'episodes' : 'chapters'} from history.\n`));
+        }
       }
     } else if (titleAction.action === 'remove_title') {
       const confirmRemove = await inquirer.prompt([
