@@ -37,20 +37,37 @@ function saveHistory(data) {
   }
 }
 
+function extractNumber(str) {
+  if (str === null || str === undefined) return null;
+  const s = String(str).trim();
+  if (/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+  const prefixMatch = s.match(/(?:ep(?:isodio)?|ch(?:apter)?|cap(?:itolo)?)\s*[:#.]?\s*(\d+(?:\.\d+)?)/i);
+  if (prefixMatch) return parseFloat(prefixMatch[1]);
+  const leadingMatch = s.match(/^(\d+(?:\.\d+)?)/);
+  if (leadingMatch) return parseFloat(leadingMatch[1]);
+  const generalMatch = s.match(/\b(\d+(?:\.\d+)?)\b/);
+  if (generalMatch) return parseFloat(generalMatch[1]);
+  return null;
+}
+
 function isChapterRead(mangaKey, chapterId, chapterUrl) {
   if (!mangaKey) return false;
   const history = loadHistory();
-  const manga = history[mangaKey];
+  const targetKey = findHistoryKey(mangaKey, 'manga') || mangaKey;
+  const manga = history[targetKey] || history[mangaKey];
   if (!manga || !Array.isArray(manga.readChapters)) return false;
 
   const key1 = String(chapterId || '').trim();
   const key2 = String(chapterUrl || '').trim();
+  const num1 = extractNumber(key1);
 
   return manga.readChapters.some(entry => {
     if (typeof entry === 'string') {
-      return entry === key1 || entry === key2;
+      const eNum = extractNumber(entry);
+      return entry === key1 || entry === key2 || (num1 !== null && eNum !== null && num1 === eNum);
     }
-    return entry.id === key1 || entry.url === key2;
+    const entryNum = extractNumber(entry.id) || extractNumber(entry.title);
+    return entry.id === key1 || entry.url === key2 || (num1 !== null && entryNum !== null && num1 === entryNum);
   });
 }
 
@@ -77,12 +94,15 @@ function markChapterRead(mangaKey, mangaTitle, chapter, mangaMetadata = {}) {
   const chapterId = String(chapter.id || '').trim();
   const chapterUrl = String(chapter.url || '').trim();
   const chapterTitle = String(chapter.title || '').trim();
+  const chapterNum = extractNumber(chapter.number || chapterId);
 
   const alreadyRead = history[mangaKey].readChapters.some(entry => {
     if (typeof entry === 'string') {
-      return entry === chapterId || entry === chapterUrl;
+      const eNum = extractNumber(entry);
+      return entry === chapterId || entry === chapterUrl || (chapterNum !== null && eNum !== null && chapterNum === eNum);
     }
-    return (chapterId && entry.id === chapterId) || (chapterUrl && entry.url === chapterUrl);
+    const eNum = extractNumber(entry.id) || extractNumber(entry.title);
+    return (chapterId && entry.id === chapterId) || (chapterUrl && entry.url === chapterUrl) || (chapterNum !== null && eNum !== null && chapterNum === eNum);
   });
 
   if (!alreadyRead) {
@@ -124,11 +144,18 @@ function getLastReadManga() {
 function getLastReadChapter(mangaKey) {
   if (!mangaKey) return null;
   const history = loadHistory();
-  const manga = history[mangaKey];
+  const targetKey = findHistoryKey(mangaKey, 'manga') || mangaKey;
+  const manga = history[targetKey] || history[mangaKey];
   if (!manga || !Array.isArray(manga.readChapters) || manga.readChapters.length === 0) {
     return null;
   }
-  return manga.readChapters[manga.readChapters.length - 1];
+  const chapters = [...manga.readChapters];
+  chapters.sort((a, b) => {
+    const nA = extractNumber(a.id) || extractNumber(a.title) || 0;
+    const nB = extractNumber(b.id) || extractNumber(b.title) || 0;
+    return nA - nB;
+  });
+  return chapters[chapters.length - 1];
 }
 
 /**
@@ -144,12 +171,16 @@ function getNextChapterToRead(mangaKey, chapters) {
 
   const lastId = String(lastRead.id || '').trim();
   const lastUrl = String(lastRead.url || '').trim();
+  const lastNum = extractNumber(lastId) || extractNumber(lastRead.title);
 
   // Find index of the last read chapter in the provided chapter list
   const lastIdx = chapters.findIndex(c => {
     const cId = String(c.id || '').trim();
     const cUrl = String(c.url || '').trim();
-    return (lastId && cId === lastId) || (lastUrl && cUrl === lastUrl);
+    const cNum = extractNumber(c.number || cId) || extractNumber(c.title);
+    return (lastId && cId === lastId) || 
+           (lastUrl && cUrl === lastUrl) || 
+           (lastNum !== null && cNum !== null && cNum === lastNum);
   });
 
   if (lastIdx === -1) {
@@ -188,25 +219,28 @@ function getAnimeStorageKey(animeKey) {
 
 function isEpisodeWatched(animeKey, episodeId, episodeUrl) {
   if (!animeKey) return false;
-  const storageKey = getAnimeStorageKey(animeKey);
+  const storageKey = findHistoryKey(animeKey, 'anime') || getAnimeStorageKey(animeKey);
   const history = loadHistory();
-  const anime = history[storageKey];
+  const anime = history[storageKey] || history[animeKey];
   if (!anime || !Array.isArray(anime.watchedEpisodes)) return false;
 
   const key1 = String(episodeId || '').trim();
   const key2 = String(episodeUrl || '').trim();
+  const num1 = extractNumber(key1);
 
   return anime.watchedEpisodes.some(entry => {
     if (typeof entry === 'string') {
-      return entry === key1 || entry === key2;
+      const eNum = extractNumber(entry);
+      return entry === key1 || entry === key2 || (num1 !== null && eNum !== null && num1 === eNum);
     }
-    return (key1 && entry.id === key1) || (key2 && entry.url === key2);
+    const entryNum = extractNumber(entry.id) || extractNumber(entry.title);
+    return entry.id === key1 || entry.url === key2 || (num1 !== null && entryNum !== null && num1 === entryNum);
   });
 }
 
 function markEpisodeWatched(animeKey, animeTitle, episode, animeMetadata = {}) {
   if (!animeKey || !episode) return;
-  const storageKey = getAnimeStorageKey(animeKey);
+  const storageKey = findHistoryKey(animeKey, 'anime') || getAnimeStorageKey(animeKey);
   const history = loadHistory();
   if (!history[storageKey]) {
     history[storageKey] = {
@@ -230,12 +264,15 @@ function markEpisodeWatched(animeKey, animeTitle, episode, animeMetadata = {}) {
   const epId = String(episode.id || '').trim();
   const epUrl = String(episode.url || '').trim();
   const epTitle = String(episode.title || '').trim();
+  const epNum = extractNumber(episode.number || epId) || extractNumber(epTitle);
 
   const alreadyWatched = history[storageKey].watchedEpisodes.some(entry => {
     if (typeof entry === 'string') {
-      return entry === epId || entry === epUrl;
+      const eNum = extractNumber(entry);
+      return entry === epId || entry === epUrl || (epNum !== null && eNum !== null && epNum === eNum);
     }
-    return (epId && entry.id === epId) || (epUrl && entry.url === epUrl);
+    const eNum = extractNumber(entry.id) || extractNumber(entry.title);
+    return (epId && entry.id === epId) || (epUrl && entry.url === epUrl) || (epNum !== null && eNum !== null && epNum === eNum);
   });
 
   if (!alreadyWatched) {
@@ -275,13 +312,19 @@ function getLastWatchedAnime() {
 
 function getLastWatchedEpisode(animeKey) {
   if (!animeKey) return null;
-  const storageKey = getAnimeStorageKey(animeKey);
+  const storageKey = findHistoryKey(animeKey, 'anime') || getAnimeStorageKey(animeKey);
   const history = loadHistory();
-  const anime = history[storageKey];
+  const anime = history[storageKey] || history[animeKey];
   if (!anime || !Array.isArray(anime.watchedEpisodes) || anime.watchedEpisodes.length === 0) {
     return null;
   }
-  return anime.watchedEpisodes[anime.watchedEpisodes.length - 1];
+  const episodes = [...anime.watchedEpisodes];
+  episodes.sort((a, b) => {
+    const nA = extractNumber(a.id) || extractNumber(a.title) || 0;
+    const nB = extractNumber(b.id) || extractNumber(b.title) || 0;
+    return nA - nB;
+  });
+  return episodes[episodes.length - 1];
 }
 
 function getNextEpisodeToWatch(animeKey, episodes) {
@@ -291,11 +334,15 @@ function getNextEpisodeToWatch(animeKey, episodes) {
 
   const lastId = String(lastWatched.id || '').trim();
   const lastUrl = String(lastWatched.url || '').trim();
+  const lastNum = extractNumber(lastId) || extractNumber(lastWatched.title);
 
   const lastIdx = episodes.findIndex(e => {
     const eId = String(e.id || '').trim();
     const eUrl = String(e.url || '').trim();
-    return (lastId && eId === lastId) || (lastUrl && eUrl === lastUrl);
+    const eNum = extractNumber(e.number || eId) || extractNumber(e.title);
+    return (lastId && eId === lastId) || 
+           (lastUrl && eUrl === lastUrl) || 
+           (lastNum !== null && eNum !== null && eNum === lastNum);
   });
 
   if (lastIdx === -1) {
@@ -351,7 +398,12 @@ function getAllHistory() {
     const cleanKey = key.replace(/^anime:/, '');
 
     if (isAnime) {
-      const episodes = Array.isArray(val.watchedEpisodes) ? val.watchedEpisodes : [];
+      const episodes = Array.isArray(val.watchedEpisodes) ? [...val.watchedEpisodes] : [];
+      episodes.sort((a, b) => {
+        const nA = extractNumber(a.id) || extractNumber(a.title) || 0;
+        const nB = extractNumber(b.id) || extractNumber(b.title) || 0;
+        return nA - nB;
+      });
       const lastEp = episodes[episodes.length - 1];
       list.push({
         type: 'anime',
@@ -367,7 +419,12 @@ function getAllHistory() {
         lastItem: lastEp ? (lastEp.title || `Episodio ${lastEp.id}`) : null
       });
     } else {
-      const chapters = Array.isArray(val.readChapters) ? val.readChapters : [];
+      const chapters = Array.isArray(val.readChapters) ? [...val.readChapters] : [];
+      chapters.sort((a, b) => {
+        const nA = extractNumber(a.id) || extractNumber(a.title) || 0;
+        const nB = extractNumber(b.id) || extractNumber(b.title) || 0;
+        return nA - nB;
+      });
       const lastCh = chapters[chapters.length - 1];
       list.push({
         type: 'manga',
@@ -434,7 +491,9 @@ function removeHistoryEntry(keyOrTitle, type = null) {
 function setMangaProgress(mangaKey, mangaTitle, chapterNum, mangaMetadata = {}) {
   const targetKey = findHistoryKey(mangaKey, 'manga') || mangaKey;
   const history = loadHistory();
-  const safeNum = String(chapterNum).trim();
+  const num = extractNumber(chapterNum);
+  if (num === null) return null;
+  const safeNum = String(num);
   const title = mangaTitle || (history[targetKey] && history[targetKey].title) || mangaKey;
 
   if (!history[targetKey]) {
@@ -448,18 +507,28 @@ function setMangaProgress(mangaKey, mangaTitle, chapterNum, mangaMetadata = {}) 
     };
   }
 
-  const entry = {
+  // Filter out any chapters with number > num so progress is reset to num
+  const existingChapters = (history[targetKey].readChapters || []).filter(c => {
+    const cNum = extractNumber(c.id) || extractNumber(c.title);
+    if (cNum === null) return true;
+    return cNum < num;
+  });
+
+  existingChapters.push({
     id: safeNum,
-    url: mangaMetadata.url || '',
+    url: mangaMetadata.url || (history[targetKey] && history[targetKey].url) || '',
     title: `Capitolo ${safeNum}`,
     readAt: new Date().toISOString()
-  };
+  });
 
-  const existingIdx = history[targetKey].readChapters.findIndex(c => String(c.id || '').trim() === safeNum || (c.title && c.title.includes(` ${safeNum}`)));
-  if (existingIdx !== -1) {
-    history[targetKey].readChapters.splice(existingIdx, 1);
-  }
-  history[targetKey].readChapters.push(entry);
+  // Sort ascending by chapter number
+  existingChapters.sort((a, b) => {
+    const nA = extractNumber(a.id) || extractNumber(a.title) || 0;
+    const nB = extractNumber(b.id) || extractNumber(b.title) || 0;
+    return nA - nB;
+  });
+
+  history[targetKey].readChapters = existingChapters;
   history[targetKey].lastReadAt = new Date().toISOString();
   saveHistory(history);
   return history[targetKey];
@@ -468,7 +537,9 @@ function setMangaProgress(mangaKey, mangaTitle, chapterNum, mangaMetadata = {}) 
 function setAnimeProgress(animeKey, animeTitle, episodeNum, animeMetadata = {}) {
   const storageKey = findHistoryKey(animeKey, 'anime') || getAnimeStorageKey(animeKey);
   const history = loadHistory();
-  const safeNum = String(episodeNum).trim();
+  const num = extractNumber(episodeNum);
+  if (num === null) return null;
+  const safeNum = String(num);
   const title = animeTitle || (history[storageKey] && history[storageKey].title) || animeKey;
 
   if (!history[storageKey]) {
@@ -484,18 +555,28 @@ function setAnimeProgress(animeKey, animeTitle, episodeNum, animeMetadata = {}) 
     };
   }
 
-  const entry = {
+  // Filter out any episodes with number > num so progress is reset to num
+  const existingEpisodes = (history[storageKey].watchedEpisodes || []).filter(e => {
+    const eNum = extractNumber(e.id) || extractNumber(e.title);
+    if (eNum === null) return true;
+    return eNum < num;
+  });
+
+  existingEpisodes.push({
     id: safeNum,
-    url: animeMetadata.url || '',
+    url: animeMetadata.url || (history[storageKey] && history[storageKey].url) || '',
     title: `Episodio ${safeNum}`,
     watchedAt: new Date().toISOString()
-  };
+  });
 
-  const existingIdx = history[storageKey].watchedEpisodes.findIndex(e => String(e.id || '').trim() === safeNum || (e.title && e.title.includes(` ${safeNum}`)));
-  if (existingIdx !== -1) {
-    history[storageKey].watchedEpisodes.splice(existingIdx, 1);
-  }
-  history[storageKey].watchedEpisodes.push(entry);
+  // Sort ascending by episode number
+  existingEpisodes.sort((a, b) => {
+    const nA = extractNumber(a.id) || extractNumber(a.title) || 0;
+    const nB = extractNumber(b.id) || extractNumber(b.title) || 0;
+    return nA - nB;
+  });
+
+  history[storageKey].watchedEpisodes = existingEpisodes;
   history[storageKey].lastWatchedAt = new Date().toISOString();
   saveHistory(history);
   return history[storageKey];
@@ -507,9 +588,15 @@ function unmarkChapter(mangaKey, chapterIdOrUrl) {
   if (!history[targetKey] || !Array.isArray(history[targetKey].readChapters)) return false;
 
   const search = String(chapterIdOrUrl).trim();
+  const searchNum = extractNumber(search);
   const initialLen = history[targetKey].readChapters.length;
+
   history[targetKey].readChapters = history[targetKey].readChapters.filter(c => {
-    return String(c.id || '').trim() !== search && String(c.url || '').trim() !== search && c.title !== search;
+    const cId = String(c.id || '').trim();
+    const cUrl = String(c.url || '').trim();
+    const cNum = extractNumber(cId) || extractNumber(c.title);
+    if (searchNum !== null && cNum !== null && searchNum === cNum) return false;
+    return cId !== search && cUrl !== search && c.title !== search;
   });
 
   if (history[targetKey].readChapters.length !== initialLen) {
@@ -525,9 +612,15 @@ function unmarkEpisode(animeKey, episodeIdOrUrl) {
   if (!history[storageKey] || !Array.isArray(history[storageKey].watchedEpisodes)) return false;
 
   const search = String(episodeIdOrUrl).trim();
+  const searchNum = extractNumber(search);
   const initialLen = history[storageKey].watchedEpisodes.length;
+
   history[storageKey].watchedEpisodes = history[storageKey].watchedEpisodes.filter(e => {
-    return String(e.id || '').trim() !== search && String(e.url || '').trim() !== search && e.title !== search;
+    const eId = String(e.id || '').trim();
+    const eUrl = String(e.url || '').trim();
+    const eNum = extractNumber(eId) || extractNumber(e.title);
+    if (searchNum !== null && eNum !== null && searchNum === eNum) return false;
+    return eId !== search && eUrl !== search && e.title !== search;
   });
 
   if (history[storageKey].watchedEpisodes.length !== initialLen) {
@@ -540,6 +633,8 @@ function unmarkEpisode(animeKey, episodeIdOrUrl) {
 function markAllMangaChaptersUpTo(mangaKey, mangaTitle, chapters, targetNum, mangaMetadata = {}) {
   const targetKey = findHistoryKey(mangaKey, 'manga') || mangaKey;
   const history = loadHistory();
+  const num = extractNumber(targetNum);
+  if (num === null) return 0;
   const title = mangaTitle || (history[targetKey] && history[targetKey].title) || mangaKey;
 
   if (!history[targetKey]) {
@@ -553,15 +648,22 @@ function markAllMangaChaptersUpTo(mangaKey, mangaTitle, chapters, targetNum, man
     };
   }
 
-  const num = parseInt(targetNum, 10);
-  let countAdded = 0;
+  // Keep existing chapters <= num
+  const existing = (history[targetKey].readChapters || []).filter(c => {
+    const cNum = extractNumber(c.id) || extractNumber(c.title);
+    return cNum === null || cNum <= num;
+  });
 
+  let countAdded = 0;
   chapters.forEach((c, idx) => {
-    const cNum = parseInt(c.number || c.id || (idx + 1), 10);
-    if (!isNaN(cNum) && cNum <= num) {
-      const already = history[targetKey].readChapters.some(rc => String(rc.id || '').trim() === String(c.id || '').trim() || rc.url === c.url);
+    const cNum = extractNumber(c.number || c.id || (idx + 1));
+    if (cNum !== null && cNum <= num) {
+      const already = existing.some(ec => {
+        const ecNum = extractNumber(ec.id) || extractNumber(ec.title);
+        return (ecNum !== null && ecNum === cNum) || ec.url === c.url;
+      });
       if (!already) {
-        history[targetKey].readChapters.push({
+        existing.push({
           id: String(c.id || cNum),
           url: c.url,
           title: c.title,
@@ -572,6 +674,13 @@ function markAllMangaChaptersUpTo(mangaKey, mangaTitle, chapters, targetNum, man
     }
   });
 
+  existing.sort((a, b) => {
+    const nA = extractNumber(a.id) || extractNumber(a.title) || 0;
+    const nB = extractNumber(b.id) || extractNumber(b.title) || 0;
+    return nA - nB;
+  });
+
+  history[targetKey].readChapters = existing;
   history[targetKey].lastReadAt = new Date().toISOString();
   saveHistory(history);
   return countAdded;
@@ -580,6 +689,8 @@ function markAllMangaChaptersUpTo(mangaKey, mangaTitle, chapters, targetNum, man
 function markAllAnimeEpisodesUpTo(animeKey, animeTitle, episodes, targetNum, animeMetadata = {}) {
   const storageKey = findHistoryKey(animeKey, 'anime') || getAnimeStorageKey(animeKey);
   const history = loadHistory();
+  const num = extractNumber(targetNum);
+  if (num === null) return 0;
   const title = animeTitle || (history[storageKey] && history[storageKey].title) || animeKey;
 
   if (!history[storageKey]) {
@@ -595,15 +706,22 @@ function markAllAnimeEpisodesUpTo(animeKey, animeTitle, episodes, targetNum, ani
     };
   }
 
-  const num = parseInt(targetNum, 10);
-  let countAdded = 0;
+  // Keep existing episodes <= num
+  const existing = (history[storageKey].watchedEpisodes || []).filter(e => {
+    const eNum = extractNumber(e.id) || extractNumber(e.title);
+    return eNum === null || eNum <= num;
+  });
 
+  let countAdded = 0;
   episodes.forEach((e, idx) => {
-    const eNum = parseInt(e.id || (idx + 1), 10);
-    if (!isNaN(eNum) && eNum <= num) {
-      const already = history[storageKey].watchedEpisodes.some(we => String(we.id || '').trim() === String(e.id || '').trim() || we.url === e.url);
+    const eNum = extractNumber(e.id || (idx + 1));
+    if (eNum !== null && eNum <= num) {
+      const already = existing.some(ee => {
+        const eeNum = extractNumber(ee.id) || extractNumber(ee.title);
+        return (eeNum !== null && eeNum === eNum) || ee.url === e.url;
+      });
       if (!already) {
-        history[storageKey].watchedEpisodes.push({
+        existing.push({
           id: String(e.id || eNum),
           url: e.url,
           title: e.title,
@@ -614,6 +732,13 @@ function markAllAnimeEpisodesUpTo(animeKey, animeTitle, episodes, targetNum, ani
     }
   });
 
+  existing.sort((a, b) => {
+    const nA = extractNumber(a.id) || extractNumber(a.title) || 0;
+    const nB = extractNumber(b.id) || extractNumber(b.title) || 0;
+    return nA - nB;
+  });
+
+  history[storageKey].watchedEpisodes = existing;
   history[storageKey].lastWatchedAt = new Date().toISOString();
   saveHistory(history);
   return countAdded;

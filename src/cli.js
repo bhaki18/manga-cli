@@ -142,11 +142,24 @@ program
           console.log(chalk.red('❌ Please specify a manga title (e.g. manga-cli "one piece" -m --set-chapter 1050)'));
           process.exit(1);
         }
-        const chNum = parseInt(options.setChapter, 10);
+        const chNum = parseFloat(options.setChapter);
         if (isNaN(chNum) || chNum <= 0) {
           console.log(chalk.red('❌ Please provide a valid chapter number'));
           process.exit(1);
         }
+
+        const existingKey = findHistoryKey(target, 'manga');
+        if (!existingKey) {
+          const spin = ora(`Searching catalog for "${target}"...`).start();
+          const results = await oppProvider.search(target, options.lang || 'it');
+          spin.stop();
+          if (results && results.length > 0) {
+            setMangaProgress(results[0].url, results[0].title, chNum, results[0]);
+            console.log(chalk.green(`✔ Manga progress updated: "${results[0].title}" set to Chapter ${chNum}!`));
+            process.exit(0);
+          }
+        }
+
         setMangaProgress(target, target, chNum);
         console.log(chalk.green(`✔ Manga progress updated: "${target}" set to Chapter ${chNum}!`));
         process.exit(0);
@@ -164,6 +177,19 @@ program
           console.log(chalk.red('❌ Please provide a valid episode number'));
           process.exit(1);
         }
+
+        const existingKey = findHistoryKey(target, 'anime');
+        if (!existingKey) {
+          const spin = ora(`Searching catalog for "${target}"...`).start();
+          const results = await oppAnimeProvider.search(target, options.lang);
+          spin.stop();
+          if (results && results.length > 0) {
+            setAnimeProgress(results[0].url, results[0].title, epNum, results[0]);
+            console.log(chalk.green(`✔ Anime progress updated: "${results[0].title}" set to Episode ${epNum}!`));
+            process.exit(0);
+          }
+        }
+
         setAnimeProgress(target, target, epNum);
         console.log(chalk.green(`✔ Anime progress updated: "${target}" set to Episode ${epNum}!`));
         process.exit(0);
@@ -405,9 +431,9 @@ async function handleHistoryFlow(options) {
 
     if (titleAction.action === 'resume') {
       if (isAnime) {
-        await handleAnimeFlow(item.title, { ...options, continue: true });
+        await handleAnimeFlow(null, { ...options, continue: true, resumeItem: item });
       } else {
-        await handleMangaFlow(item.title, { ...options, continue: true });
+        await handleMangaFlow(null, { ...options, continue: true, resumeItem: item });
       }
       inHistoryLoop = false;
     } else if (titleAction.action === 'set_progress') {
@@ -417,16 +443,16 @@ async function handleHistoryFlow(options) {
           name: 'num',
           message: `Enter the ${isAnime ? 'episode' : 'chapter'} number you reached (e.g. 25, 1050):`,
           validate: val => {
-            const n = parseInt(val, 10);
+            const n = parseFloat(val);
             return !isNaN(n) && n > 0 ? true : 'Please enter a valid positive number';
           }
         }
       ]);
-      const targetNum = parseInt(numAnswer.num, 10);
+      const targetNum = parseFloat(numAnswer.num);
       if (isAnime) {
-        setAnimeProgress(item.key, item.title, targetNum, { url: item.url, source: item.source, language: item.language });
+        setAnimeProgress(item.storageKey || item.key, item.title, targetNum, { url: item.url, source: item.source, language: item.language });
       } else {
-        setMangaProgress(item.key, item.title, targetNum, { url: item.url, source: item.source, language: item.language });
+        setMangaProgress(item.storageKey || item.key, item.title, targetNum, { url: item.url, source: item.source, language: item.language });
       }
       console.log(chalk.green(`✔ Progress for "${item.title}" set to ${isAnime ? 'Episode' : 'Chapter'} ${targetNum}!\n`));
     } else if (titleAction.action === 'mark_range') {
@@ -436,26 +462,44 @@ async function handleHistoryFlow(options) {
           name: 'num',
           message: `Mark all ${isAnime ? 'episodes' : 'chapters'} as ${isAnime ? 'watched' : 'read'} up to number:`,
           validate: val => {
-            const n = parseInt(val, 10);
+            const n = parseFloat(val);
             return !isNaN(n) && n > 0 ? true : 'Please enter a valid positive number';
           }
         }
       ]);
-      const targetNum = parseInt(rangeAnswer.num, 10);
+      const targetNum = parseFloat(rangeAnswer.num);
       const spinner = ora(`Fetching ${isAnime ? 'episodes' : 'chapters'} list...`).start();
 
       let count = 0;
-      if (isAnime) {
-        const eps = await oppAnimeProvider.getEpisodes(item.url);
-        spinner.stop();
-        count = markAllAnimeEpisodesUpTo(item.key, item.title, eps, targetNum, { url: item.url, source: item.source, language: item.language });
-      } else {
-        const provider = item.source === 'mangadex' ? mdProvider : (item.source === 'mangapill' ? mpProvider : oppProvider);
-        const chs = await provider.getChapters(item.url, item.language);
-        spinner.stop();
-        count = markAllMangaChaptersUpTo(item.key, item.title, chs, targetNum, { url: item.url, source: item.source, language: item.language });
+      try {
+        if (isAnime) {
+          if (!item.url || !item.url.startsWith('http')) {
+            const searchRes = await oppAnimeProvider.search(item.title);
+            if (searchRes && searchRes.length > 0) {
+              item.url = searchRes[0].url;
+            }
+          }
+          const eps = await oppAnimeProvider.getEpisodes(item.url);
+          spinner.stop();
+          count = markAllAnimeEpisodesUpTo(item.storageKey || item.key, item.title, eps, targetNum, { url: item.url, source: item.source, language: item.language });
+        } else {
+          if (!item.url || !item.url.startsWith('http')) {
+            const searchRes = await oppProvider.search(item.title, item.language || 'it');
+            if (searchRes && searchRes.length > 0) {
+              item.url = searchRes[0].url;
+              item.source = searchRes[0].source;
+            }
+          }
+          const provider = item.source === 'mangadex' ? mdProvider : (item.source === 'mangapill' ? mpProvider : oppProvider);
+          const chs = await provider.getChapters(item.url, item.language);
+          spinner.stop();
+          count = markAllMangaChaptersUpTo(item.storageKey || item.key, item.title, chs, targetNum, { url: item.url, source: item.source, language: item.language });
+        }
+        console.log(chalk.green(`✔ Marked ${count} ${isAnime ? 'episodes' : 'chapters'} up to #${targetNum} as ${isAnime ? 'watched' : 'read'}!\n`));
+      } catch (err) {
+        if (spinner) spinner.stop();
+        console.log(chalk.red(`❌ Could not fetch list to mark range: ${err.message}\n`));
       }
-      console.log(chalk.green(`✔ Marked ${count} ${isAnime ? 'episodes' : 'chapters'} up to #${targetNum} as ${isAnime ? 'watched' : 'read'}!\n`));
     } else if (titleAction.action === 'unmark_items') {
       const historyData = loadHistory();
       const currentEntry = historyData[item.storageKey] || historyData[item.key];
@@ -514,8 +558,12 @@ async function handleHistoryFlow(options) {
 // ANIME FLOW
 // ====================================================================
 async function handleAnimeFlow(query, options) {
-  let selectedAnime = null;
+  let selectedAnime = options.resumeItem ? { ...options.resumeItem } : null;
   let selectedLang = options.lang ? options.lang.toLowerCase() : null;
+
+  if (selectedAnime && selectedAnime.language && !selectedLang) {
+    selectedLang = selectedAnime.language;
+  }
 
   // 1. Random anime mode
   if (options.random) {
@@ -615,6 +663,15 @@ async function handleAnimeFlow(query, options) {
     }
   }
 
+  // Ensure valid URL
+  if (!selectedAnime.url || !selectedAnime.url.startsWith('http')) {
+    const searchRes = await oppAnimeProvider.search(selectedAnime.title || selectedAnime.url, selectedLang);
+    if (searchRes && searchRes.length > 0) {
+      selectedAnime.url = searchRes[0].url;
+      selectedAnime.title = searchRes[0].title;
+    }
+  }
+
   const animeKey = (selectedAnime.url || selectedAnime.title).toLowerCase().trim();
 
   // 4. Audio track selection
@@ -627,7 +684,9 @@ async function handleAnimeFlow(query, options) {
     preferredAudio = 'ita';
   } else if (selectedAnime.audio === 'subita' || selectedAnime.audio === 'sub') {
     preferredAudio = 'subita';
-  } else if (!options.getUrl && !options.info && (selectedAnime.audio === 'both' || selectedAnime.title.includes('ITA/SUB ITA') || selectedAnime.title.includes('ITA / SUB ITA'))) {
+  } else if (options.resumeItem && selectedAnime.audio) {
+    preferredAudio = selectedAnime.audio;
+  } else if (!options.getUrl && !options.info && !options.resumeItem && (selectedAnime.audio === 'both' || selectedAnime.title.includes('ITA/SUB ITA') || selectedAnime.title.includes('ITA / SUB ITA'))) {
     const audioAnswer = await inquirer.prompt([
       {
         type: 'list',
@@ -865,8 +924,12 @@ async function handleAnimeFlow(query, options) {
 // ====================================================================
 async function handleMangaFlow(query, options) {
   let selectedLang = options.lang ? options.lang.toLowerCase() : null;
-  let selectedManga = null;
+  let selectedManga = options.resumeItem ? { ...options.resumeItem } : null;
   let chosenProvider = oppProvider;
+
+  if (selectedManga && selectedManga.language && !selectedLang) {
+    selectedLang = selectedManga.language;
+  }
 
   // 1. Random manga mode
   if (options.random) {
@@ -1015,6 +1078,16 @@ async function handleMangaFlow(query, options) {
       ]);
 
       selectedManga = mangaAnswer.manga;
+    }
+  }
+
+  // Ensure valid URL
+  if (!selectedManga.url || !selectedManga.url.startsWith('http')) {
+    const searchRes = await oppProvider.search(selectedManga.title || selectedManga.url, selectedLang || 'it');
+    if (searchRes && searchRes.length > 0) {
+      selectedManga.url = searchRes[0].url;
+      selectedManga.title = searchRes[0].title;
+      selectedManga.source = searchRes[0].source || 'onepiecepower';
     }
   }
 
