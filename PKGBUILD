@@ -1,8 +1,8 @@
 # Maintainer: bhaki18 <https://github.com/bhaki18>
 pkgname=manga-cli-git
-pkgver=1.3.0
+pkgver=2.0.0
 pkgrel=1
-pkgdesc="Terminal CLI to read manga online with RAM caching, inspired by ani-cli"
+pkgdesc="Terminal CLI to read manga online and stream anime with RAM caching and MPV integration"
 arch=('any')
 url="https://github.com/bhaki18/manga-cli"
 license=('MIT')
@@ -14,7 +14,7 @@ optdepends=(
     'fzf: menu interattivo fuzzy finder'
 )
 makedepends=('npm' 'git')
-provides=('manga-cli')
+provides=('manga-cli' 'anime-cli')
 conflicts=('manga-cli')
 source=("$pkgname::git+https://github.com/bhaki18/manga-cli.git")
 sha256sums=('SKIP')
@@ -30,7 +30,8 @@ package() {
     # Rendi eseguibile l'entrypoint
     chmod +x "$pkgdir/usr/lib/node_modules/$pkgname/src/cli.js"
 
-    # Crea il comando 'manga-cli' direttamente in /usr/bin/
+    # Crea i comandi 'manga-cli' e 'anime-cli' direttamente in /usr/bin/
     install -d "$pkgdir/usr/bin"
     ln -s "/usr/lib/node_modules/$pkgname/src/cli.js" "$pkgdir/usr/bin/manga-cli"
+    ln -s "/usr/lib/node_modules/$pkgname/src/cli.js" "$pkgdir/usr/bin/anime-cli"
 }
