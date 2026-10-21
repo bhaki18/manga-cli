@@ -162,18 +162,41 @@ manga-cli "one piece" -m -C 1 -g
 
 ---
 
-### 📜 History Explorer & Auto-Resume (`-H`, `-c`)
+### 📜 History Explorer & Progress Manager (`-H`, `--edit-history`)
+
+Manage and edit your reading and watching progress directly from your terminal:
 
 ```bash
-# Open interactive history explorer (displays read chapters & watched episodes)
+# Open interactive history manager and editor
 manga-cli -H
-manga-cli history
+manga-cli edit
+manga-cli --edit-history
 
 # Auto-resume from next unread chapter or watched episode
 manga-cli -c
 anime-cli -c
 manga-cli -m -c
+
+# Directly set manga chapter progress
+manga-cli "one piece" -m --set-chapter 1050
+
+# Directly set anime episode progress
+anime-cli "one piece" --set-episode 1071
+manga-cli "dr. stone" -a --set-episode 15
+
+# Remove a specific title from history
+manga-cli "berserk" --remove-history
+anime-cli "one piece" --remove-history
 ```
+
+#### 🛠️ Interactive History Actions Menu:
+When you open `manga-cli -H` and pick a title, you can:
+- ▶️ **Resume reading / watching** from your saved position.
+- ✏️ **Set last episode/chapter number manually** to update your progress.
+- ✅ **Mark all episodes/chapters up to number N as read/watched** in one step.
+- ❌ **Unmark specific episodes/chapters** using an interactive multi-select checklist (spacebar to select).
+- 🗑️ **Remove this title from history**.
+
 
 ---
 
@@ -226,6 +249,10 @@ manga-cli -m -D      # Delete only read manga history
 | `-d, --download [dir]` | Download chapter pages or anime episode `.mp4` for offline viewing |
 | `-g, --get-url` | Print direct streaming/image URLs to stdout and exit |
 | `-H, --history` | Display read/watched history with interactive resume |
+| `--edit-history` | Open interactive history manager & progress editor |
+| `--set-chapter <num\>` | Directly set last read manga chapter progress |
+| `--set-episode <num\>` | Directly set last watched anime episode progress |
+| `--remove-history` | Remove specified title from reading/watching history |
 | `-r, --random` | Pick and open a random manga or anime title |
 | `-i, --info` | Display title metadata and total chapters/episodes without opening player |
 | `--list` | List all matching titles from catalog and exit |

@@ -393,6 +393,232 @@ function getAllHistory() {
   return list;
 }
 
+function findHistoryKey(keyOrTitle, type = null) {
+  const history = loadHistory();
+  const search = String(keyOrTitle || '').toLowerCase().trim();
+  if (!search) return null;
+
+  for (const [key, val] of Object.entries(history)) {
+    const isAnime = key.startsWith('anime:') || val.mediaType === 'anime';
+    if (type === 'anime' && !isAnime) continue;
+    if (type === 'manga' && isAnime) continue;
+
+    const cleanKey = key.replace(/^anime:/, '').toLowerCase();
+    const title = String(val.title || '').toLowerCase();
+    const url = String(val.url || '').toLowerCase();
+
+    if (cleanKey === search || key.toLowerCase() === search || title === search || url === search || title.includes(search)) {
+      return key;
+    }
+  }
+  return null;
+}
+
+function removeHistoryEntry(keyOrTitle, type = null) {
+  const history = loadHistory();
+  const targetKey = findHistoryKey(keyOrTitle, type);
+  if (!targetKey || !history[targetKey]) {
+    if (history[keyOrTitle]) {
+      delete history[keyOrTitle];
+      saveHistory(history);
+      return true;
+    }
+    return false;
+  }
+
+  delete history[targetKey];
+  saveHistory(history);
+  return true;
+}
+
+function setMangaProgress(mangaKey, mangaTitle, chapterNum, mangaMetadata = {}) {
+  const targetKey = findHistoryKey(mangaKey, 'manga') || mangaKey;
+  const history = loadHistory();
+  const safeNum = String(chapterNum).trim();
+  const title = mangaTitle || (history[targetKey] && history[targetKey].title) || mangaKey;
+
+  if (!history[targetKey]) {
+    history[targetKey] = {
+      title,
+      url: mangaMetadata.url || mangaKey,
+      source: mangaMetadata.source || 'onepiecepower',
+      language: mangaMetadata.language || 'it',
+      lastReadAt: new Date().toISOString(),
+      readChapters: []
+    };
+  }
+
+  const entry = {
+    id: safeNum,
+    url: mangaMetadata.url || '',
+    title: `Capitolo ${safeNum}`,
+    readAt: new Date().toISOString()
+  };
+
+  const existingIdx = history[targetKey].readChapters.findIndex(c => String(c.id || '').trim() === safeNum || (c.title && c.title.includes(` ${safeNum}`)));
+  if (existingIdx !== -1) {
+    history[targetKey].readChapters.splice(existingIdx, 1);
+  }
+  history[targetKey].readChapters.push(entry);
+  history[targetKey].lastReadAt = new Date().toISOString();
+  saveHistory(history);
+  return history[targetKey];
+}
+
+function setAnimeProgress(animeKey, animeTitle, episodeNum, animeMetadata = {}) {
+  const storageKey = findHistoryKey(animeKey, 'anime') || getAnimeStorageKey(animeKey);
+  const history = loadHistory();
+  const safeNum = String(episodeNum).trim();
+  const title = animeTitle || (history[storageKey] && history[storageKey].title) || animeKey;
+
+  if (!history[storageKey]) {
+    history[storageKey] = {
+      mediaType: 'anime',
+      title,
+      url: animeMetadata.url || animeKey,
+      source: animeMetadata.source || 'onepiecepower',
+      language: animeMetadata.language || 'it',
+      audio: animeMetadata.audio || 'both',
+      lastWatchedAt: new Date().toISOString(),
+      watchedEpisodes: []
+    };
+  }
+
+  const entry = {
+    id: safeNum,
+    url: animeMetadata.url || '',
+    title: `Episodio ${safeNum}`,
+    watchedAt: new Date().toISOString()
+  };
+
+  const existingIdx = history[storageKey].watchedEpisodes.findIndex(e => String(e.id || '').trim() === safeNum || (e.title && e.title.includes(` ${safeNum}`)));
+  if (existingIdx !== -1) {
+    history[storageKey].watchedEpisodes.splice(existingIdx, 1);
+  }
+  history[storageKey].watchedEpisodes.push(entry);
+  history[storageKey].lastWatchedAt = new Date().toISOString();
+  saveHistory(history);
+  return history[storageKey];
+}
+
+function unmarkChapter(mangaKey, chapterIdOrUrl) {
+  const targetKey = findHistoryKey(mangaKey, 'manga') || mangaKey;
+  const history = loadHistory();
+  if (!history[targetKey] || !Array.isArray(history[targetKey].readChapters)) return false;
+
+  const search = String(chapterIdOrUrl).trim();
+  const initialLen = history[targetKey].readChapters.length;
+  history[targetKey].readChapters = history[targetKey].readChapters.filter(c => {
+    return String(c.id || '').trim() !== search && String(c.url || '').trim() !== search && c.title !== search;
+  });
+
+  if (history[targetKey].readChapters.length !== initialLen) {
+    saveHistory(history);
+    return true;
+  }
+  return false;
+}
+
+function unmarkEpisode(animeKey, episodeIdOrUrl) {
+  const storageKey = findHistoryKey(animeKey, 'anime') || getAnimeStorageKey(animeKey);
+  const history = loadHistory();
+  if (!history[storageKey] || !Array.isArray(history[storageKey].watchedEpisodes)) return false;
+
+  const search = String(episodeIdOrUrl).trim();
+  const initialLen = history[storageKey].watchedEpisodes.length;
+  history[storageKey].watchedEpisodes = history[storageKey].watchedEpisodes.filter(e => {
+    return String(e.id || '').trim() !== search && String(e.url || '').trim() !== search && e.title !== search;
+  });
+
+  if (history[storageKey].watchedEpisodes.length !== initialLen) {
+    saveHistory(history);
+    return true;
+  }
+  return false;
+}
+
+function markAllMangaChaptersUpTo(mangaKey, mangaTitle, chapters, targetNum, mangaMetadata = {}) {
+  const targetKey = findHistoryKey(mangaKey, 'manga') || mangaKey;
+  const history = loadHistory();
+  const title = mangaTitle || (history[targetKey] && history[targetKey].title) || mangaKey;
+
+  if (!history[targetKey]) {
+    history[targetKey] = {
+      title,
+      url: mangaMetadata.url || mangaKey,
+      source: mangaMetadata.source || 'onepiecepower',
+      language: mangaMetadata.language || 'it',
+      lastReadAt: new Date().toISOString(),
+      readChapters: []
+    };
+  }
+
+  const num = parseInt(targetNum, 10);
+  let countAdded = 0;
+
+  chapters.forEach((c, idx) => {
+    const cNum = parseInt(c.number || c.id || (idx + 1), 10);
+    if (!isNaN(cNum) && cNum <= num) {
+      const already = history[targetKey].readChapters.some(rc => String(rc.id || '').trim() === String(c.id || '').trim() || rc.url === c.url);
+      if (!already) {
+        history[targetKey].readChapters.push({
+          id: String(c.id || cNum),
+          url: c.url,
+          title: c.title,
+          readAt: new Date().toISOString()
+        });
+        countAdded++;
+      }
+    }
+  });
+
+  history[targetKey].lastReadAt = new Date().toISOString();
+  saveHistory(history);
+  return countAdded;
+}
+
+function markAllAnimeEpisodesUpTo(animeKey, animeTitle, episodes, targetNum, animeMetadata = {}) {
+  const storageKey = findHistoryKey(animeKey, 'anime') || getAnimeStorageKey(animeKey);
+  const history = loadHistory();
+  const title = animeTitle || (history[storageKey] && history[storageKey].title) || animeKey;
+
+  if (!history[storageKey]) {
+    history[storageKey] = {
+      mediaType: 'anime',
+      title,
+      url: animeMetadata.url || animeKey,
+      source: animeMetadata.source || 'onepiecepower',
+      language: animeMetadata.language || 'it',
+      audio: animeMetadata.audio || 'both',
+      lastWatchedAt: new Date().toISOString(),
+      watchedEpisodes: []
+    };
+  }
+
+  const num = parseInt(targetNum, 10);
+  let countAdded = 0;
+
+  episodes.forEach((e, idx) => {
+    const eNum = parseInt(e.id || (idx + 1), 10);
+    if (!isNaN(eNum) && eNum <= num) {
+      const already = history[storageKey].watchedEpisodes.some(we => String(we.id || '').trim() === String(e.id || '').trim() || we.url === e.url);
+      if (!already) {
+        history[storageKey].watchedEpisodes.push({
+          id: String(e.id || eNum),
+          url: e.url,
+          title: e.title,
+          watchedAt: new Date().toISOString()
+        });
+        countAdded++;
+      }
+    }
+  });
+
+  history[storageKey].lastWatchedAt = new Date().toISOString();
+  saveHistory(history);
+  return countAdded;
+}
+
 module.exports = {
   isChapterRead,
   markChapterRead,
@@ -407,6 +633,14 @@ module.exports = {
   getNextEpisodeToWatch,
   clearHistory,
   getAllHistory,
+  findHistoryKey,
+  removeHistoryEntry,
+  setMangaProgress,
+  setAnimeProgress,
+  unmarkChapter,
+  unmarkEpisode,
+  markAllMangaChaptersUpTo,
+  markAllAnimeEpisodesUpTo,
   HISTORY_FILE
 };
 

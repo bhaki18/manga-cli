@@ -26,7 +26,16 @@ const {
   getLastWatchedAnime,
   getNextEpisodeToWatch,
   clearHistory,
-  getAllHistory
+  getAllHistory,
+  findHistoryKey,
+  removeHistoryEntry,
+  setMangaProgress,
+  setAnimeProgress,
+  unmarkChapter,
+  unmarkEpisode,
+  markAllMangaChaptersUpTo,
+  markAllAnimeEpisodesUpTo,
+  loadHistory
 } = require('./utils/history');
 
 const {
@@ -67,6 +76,11 @@ program
   .option('-r, --random', 'Pick and open a random manga or anime title')
   .option('-i, --info', 'Display title metadata and total chapters/episodes without opening player')
   .option('--list', 'List all matching titles from catalog and exit')
+  // History editing & management
+  .option('--set-chapter <number>', 'Set last read manga chapter progress directly')
+  .option('--set-episode <number>', 'Set last watched anime episode progress directly')
+  .option('--remove-history', 'Remove specified title from reading/watch history')
+  .option('--edit-history', 'Open interactive history editor and progress manager')
   // Player & Viewer options
   .option('-p, --player <name>', 'Force specific media player (e.g. mpv, vlc, ffplay, xdg-open)')
   .option('-v, --viewer <name>', 'Force specific image viewer (e.g. feh, sxiv, imv, mpv, loupe)')
@@ -84,6 +98,9 @@ program
       if (firstArg === 'history' || firstArg === 'hist') {
         options.history = true;
         query = null;
+      } else if (firstArg === 'edit-history' || firstArg === 'edit') {
+        options.editHistory = true;
+        query = subQuery;
       } else if (firstArg === 'random' || firstArg === 'rand') {
         options.random = true;
         query = null;
@@ -101,8 +118,59 @@ program
         query = subQuery;
       }
 
-      // 1. History view command
-      if (options.history) {
+      // Direct command to remove title from history
+      if (options.removeHistory) {
+        const target = query || process.argv[3];
+        if (!target) {
+          console.log(chalk.red('❌ Please specify a title to remove from history (e.g. manga-cli "berserk" --remove-history)'));
+          process.exit(1);
+        }
+        const mediaType = options.anime ? 'anime' : (options.manga ? 'manga' : null);
+        const removed = removeHistoryEntry(target, mediaType);
+        if (removed) {
+          console.log(chalk.green(`✔ Successfully removed "${target}" from history.`));
+        } else {
+          console.log(chalk.yellow(`ℹ️ Title "${target}" was not found in history.`));
+        }
+        process.exit(0);
+      }
+
+      // Direct command to set manga chapter progress
+      if (options.setChapter) {
+        const target = query || process.argv[3];
+        if (!target) {
+          console.log(chalk.red('❌ Please specify a manga title (e.g. manga-cli "one piece" -m --set-chapter 1050)'));
+          process.exit(1);
+        }
+        const chNum = parseInt(options.setChapter, 10);
+        if (isNaN(chNum) || chNum <= 0) {
+          console.log(chalk.red('❌ Please provide a valid chapter number'));
+          process.exit(1);
+        }
+        setMangaProgress(target, target, chNum);
+        console.log(chalk.green(`✔ Manga progress updated: "${target}" set to Chapter ${chNum}!`));
+        process.exit(0);
+      }
+
+      // Direct command to set anime episode progress
+      if (options.setEpisode) {
+        const target = query || process.argv[3];
+        if (!target) {
+          console.log(chalk.red('❌ Please specify an anime title (e.g. anime-cli "one piece" --set-episode 1071)'));
+          process.exit(1);
+        }
+        const epNum = parseInt(options.setEpisode, 10);
+        if (isNaN(epNum) || epNum <= 0) {
+          console.log(chalk.red('❌ Please provide a valid episode number'));
+          process.exit(1);
+        }
+        setAnimeProgress(target, target, epNum);
+        console.log(chalk.green(`✔ Anime progress updated: "${target}" set to Episode ${epNum}!`));
+        process.exit(0);
+      }
+
+      // 1. History view or edit command
+      if (options.history || options.editHistory) {
         await handleHistoryFlow(options);
         process.exit(0);
       }
@@ -239,60 +307,206 @@ program
 // HISTORY FLOW
 // ====================================================================
 async function handleHistoryFlow(options) {
-  const allHistory = getAllHistory();
+  let inHistoryLoop = true;
 
-  console.log(chalk.bold.cyan('\n  📜 MANGA & ANIME HISTORY\n'));
+  while (inHistoryLoop) {
+    const allHistory = getAllHistory();
 
-  if (allHistory.length === 0) {
-    console.log(chalk.yellow('ℹ️ No reading or watch history found.\n'));
-    return;
-  }
+    console.log(chalk.bold.cyan('\n  📜 MANGA & ANIME HISTORY MANAGER\n'));
 
-  // Display summary table
-  allHistory.slice(0, 15).forEach(item => {
+    if (allHistory.length === 0) {
+      console.log(chalk.yellow('ℹ️ No reading or watch history found.\n'));
+      return;
+    }
+
+    // Display summary table
+    allHistory.slice(0, 15).forEach(item => {
+      const isAnime = item.type === 'anime';
+      const badge = isAnime ? chalk.bgMagenta.bold(' ANIME ') : chalk.bgBlue.bold(' MANGA ');
+      const countLabel = isAnime ? `${item.count} eps watched` : `${item.count} chapters read`;
+      const lastDate = item.lastAccessedAt ? new Date(item.lastAccessedAt).toLocaleDateString() : '';
+
+      console.log(`${badge} ${chalk.bold(item.title)}`);
+      console.log(`       ${chalk.dim(`Last: ${item.lastItem || 'N/A'}`)} | ${chalk.green(countLabel)} | ${chalk.dim(lastDate)}`);
+    });
+
+    console.log('');
+
+    // Interactive menu
+    const historyChoices = allHistory.map(item => {
+      const icon = item.type === 'anime' ? '🎬' : '📖';
+      return {
+        name: `${icon} ${item.title} ${chalk.dim(`(Last: ${item.lastItem || 'N/A'})`)}`,
+        value: item
+      };
+    });
+    historyChoices.push(new inquirer.Separator('── Actions ──'));
+    historyChoices.push({ name: '🗑️  Clear All History (Svuota tutta la cronologia)', value: '__clear_all__' });
+    historyChoices.push({ name: '🚪 Exit (Esci)', value: '__exit__' });
+
+    const choice = await inquirer.prompt([
+      {
+        type: 'autocomplete',
+        name: 'selected',
+        message: 'Select a title to manage / resume (or exit):',
+        pageSize: 12,
+        source: async (answersSoFar, input) => {
+          if (!input) return historyChoices;
+          const clean = input.toLowerCase();
+          return historyChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
+        }
+      }
+    ]);
+
+    if (!choice.selected || choice.selected === '__exit__') {
+      inHistoryLoop = false;
+      break;
+    }
+
+    if (choice.selected === '__clear_all__') {
+      const confirmClear = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'yes',
+          message: 'Are you sure you want to delete ALL reading and watch history?',
+          default: false
+        }
+      ]);
+      if (confirmClear.yes) {
+        clearHistory('all');
+        console.log(chalk.green('✔ All history deleted successfully.\n'));
+      }
+      continue;
+    }
+
+    // A specific title was selected!
+    const item = choice.selected;
     const isAnime = item.type === 'anime';
-    const badge = isAnime ? chalk.bgMagenta.bold(' ANIME ') : chalk.bgBlue.bold(' MANGA ');
-    const countLabel = isAnime ? `${item.count} eps watched` : `${item.count} chapters read`;
-    const lastDate = item.lastAccessedAt ? new Date(item.lastAccessedAt).toLocaleDateString() : '';
+    const mediaLabel = isAnime ? 'Anime' : 'Manga';
 
-    console.log(`${badge} ${chalk.bold(item.title)}`);
-    console.log(`       ${chalk.dim(`Last: ${item.lastItem || 'N/A'}`)} | ${chalk.green(countLabel)} | ${chalk.dim(lastDate)}`);
-  });
+    console.log(chalk.cyan(`\nManaging: ${chalk.bold(item.title)} [${mediaLabel}]`));
+    console.log(chalk.dim(`Current progress: ${item.lastItem || 'None'} (${item.count} recorded in history)`));
 
-  console.log('');
+    const titleAction = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: `What would you like to do with "${item.title}"?`,
+        choices: [
+          { name: `▶️  Resume ${isAnime ? 'watching' : 'reading'} (Riprendi)`, value: 'resume' },
+          { name: `✏️  Set last ${isAnime ? 'episode' : 'chapter'} number (Imposta progresso)`, value: 'set_progress' },
+          { name: `✅ Mark all ${isAnime ? 'episodes' : 'chapters'} up to number N as ${isAnime ? 'watched' : 'read'}`, value: 'mark_range' },
+          { name: `❌ Unmark specific ${isAnime ? 'episodes' : 'chapters'} (Deseleziona singoli)`, value: 'unmark_items' },
+          { name: `🗑️  Remove this title from history (Elimina dalla cronologia)`, value: 'remove_title' },
+          { name: `↩️  Back to history list (Torna indietro)`, value: 'back' }
+        ]
+      }
+    ]);
 
-  // Interactive resume from history
-  const historyChoices = allHistory.map(item => {
-    const icon = item.type === 'anime' ? '🎬' : '📖';
-    return {
-      name: `${icon} ${item.title} ${chalk.dim(`(Last: ${item.lastItem || 'N/A'})`)}`,
-      value: item
-    };
-  });
-  historyChoices.push(new inquirer.Separator());
-  historyChoices.push({ name: '🚪 Exit', value: null });
+    if (titleAction.action === 'resume') {
+      if (isAnime) {
+        await handleAnimeFlow(item.title, { ...options, continue: true });
+      } else {
+        await handleMangaFlow(item.title, { ...options, continue: true });
+      }
+      inHistoryLoop = false;
+    } else if (titleAction.action === 'set_progress') {
+      const numAnswer = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'num',
+          message: `Enter the ${isAnime ? 'episode' : 'chapter'} number you reached (e.g. 25, 1050):`,
+          validate: val => {
+            const n = parseInt(val, 10);
+            return !isNaN(n) && n > 0 ? true : 'Please enter a valid positive number';
+          }
+        }
+      ]);
+      const targetNum = parseInt(numAnswer.num, 10);
+      if (isAnime) {
+        setAnimeProgress(item.key, item.title, targetNum, { url: item.url, source: item.source, language: item.language });
+      } else {
+        setMangaProgress(item.key, item.title, targetNum, { url: item.url, source: item.source, language: item.language });
+      }
+      console.log(chalk.green(`✔ Progress for "${item.title}" set to ${isAnime ? 'Episode' : 'Chapter'} ${targetNum}!\n`));
+    } else if (titleAction.action === 'mark_range') {
+      const rangeAnswer = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'num',
+          message: `Mark all ${isAnime ? 'episodes' : 'chapters'} as ${isAnime ? 'watched' : 'read'} up to number:`,
+          validate: val => {
+            const n = parseInt(val, 10);
+            return !isNaN(n) && n > 0 ? true : 'Please enter a valid positive number';
+          }
+        }
+      ]);
+      const targetNum = parseInt(rangeAnswer.num, 10);
+      const spinner = ora(`Fetching ${isAnime ? 'episodes' : 'chapters'} list...`).start();
 
-  const choice = await inquirer.prompt([
-    {
-      type: 'autocomplete',
-      name: 'selected',
-      message: 'Select a title to resume reading/watching (or exit):',
-      pageSize: 10,
-      source: async (answersSoFar, input) => {
-        if (!input) return historyChoices;
-        const clean = input.toLowerCase();
-        return historyChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
+      let count = 0;
+      if (isAnime) {
+        const eps = await oppAnimeProvider.getEpisodes(item.url);
+        spinner.stop();
+        count = markAllAnimeEpisodesUpTo(item.key, item.title, eps, targetNum, { url: item.url, source: item.source, language: item.language });
+      } else {
+        const provider = item.source === 'mangadex' ? mdProvider : (item.source === 'mangapill' ? mpProvider : oppProvider);
+        const chs = await provider.getChapters(item.url, item.language);
+        spinner.stop();
+        count = markAllMangaChaptersUpTo(item.key, item.title, chs, targetNum, { url: item.url, source: item.source, language: item.language });
+      }
+      console.log(chalk.green(`✔ Marked ${count} ${isAnime ? 'episodes' : 'chapters'} up to #${targetNum} as ${isAnime ? 'watched' : 'read'}!\n`));
+    } else if (titleAction.action === 'unmark_items') {
+      const historyData = loadHistory();
+      const currentEntry = historyData[item.storageKey] || historyData[item.key];
+      const itemsList = isAnime
+        ? (currentEntry ? currentEntry.watchedEpisodes || [] : [])
+        : (currentEntry ? currentEntry.readChapters || [] : []);
+
+      if (itemsList.length === 0) {
+        console.log(chalk.yellow(`ℹ️ No ${isAnime ? 'episodes' : 'chapters'} recorded for this title.\n`));
+        continue;
+      }
+
+      const unmarkChoices = itemsList.map(e => ({
+        name: e.title || (isAnime ? `Episodio ${e.id}` : `Capitolo ${e.id}`),
+        value: e.id || e.url
+      }));
+
+      const unmarkPrompt = await inquirer.prompt([
+        {
+          type: 'checkbox',
+          name: 'toRemove',
+          message: `Select ${isAnime ? 'episodes' : 'chapters'} to remove from history (use spacebar):`,
+          choices: unmarkChoices,
+          pageSize: 12
+        }
+      ]);
+
+      if (unmarkPrompt.toRemove && unmarkPrompt.toRemove.length > 0) {
+        unmarkPrompt.toRemove.forEach(idOrUrl => {
+          if (isAnime) {
+            unmarkEpisode(item.storageKey || item.key, idOrUrl);
+          } else {
+            unmarkChapter(item.storageKey || item.key, idOrUrl);
+          }
+        });
+        console.log(chalk.green(`✔ Removed ${unmarkPrompt.toRemove.length} ${isAnime ? 'episodes' : 'chapters'} from history.\n`));
+      }
+    } else if (titleAction.action === 'remove_title') {
+      const confirmRemove = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'yes',
+          message: `Are you sure you want to remove "${item.title}" from history?`,
+          default: true
+        }
+      ]);
+      if (confirmRemove.yes) {
+        removeHistoryEntry(item.storageKey);
+        console.log(chalk.green(`✔ "${item.title}" removed from history.\n`));
       }
     }
-  ]);
-
-  if (!choice.selected) return;
-
-  const item = choice.selected;
-  if (item.type === 'anime') {
-    await handleAnimeFlow(item.title, { ...options, continue: true });
-  } else {
-    await handleMangaFlow(item.title, { ...options, continue: true });
   }
 }
 
