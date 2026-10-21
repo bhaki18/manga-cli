@@ -342,6 +342,57 @@ function clearHistory(type = 'all') {
   } catch {}
 }
 
+function getAllHistory() {
+  const history = loadHistory();
+  const list = [];
+
+  for (const [key, val] of Object.entries(history)) {
+    const isAnime = key.startsWith('anime:') || val.mediaType === 'anime';
+    const cleanKey = key.replace(/^anime:/, '');
+
+    if (isAnime) {
+      const episodes = Array.isArray(val.watchedEpisodes) ? val.watchedEpisodes : [];
+      const lastEp = episodes[episodes.length - 1];
+      list.push({
+        type: 'anime',
+        key: cleanKey,
+        storageKey: key,
+        title: val.title || cleanKey,
+        url: val.url || cleanKey,
+        source: val.source || 'onepiecepower',
+        language: val.language || 'it',
+        audio: val.audio || 'both',
+        count: episodes.length,
+        lastAccessedAt: val.lastWatchedAt || val.lastReadAt || null,
+        lastItem: lastEp ? (lastEp.title || `Episodio ${lastEp.id}`) : null
+      });
+    } else {
+      const chapters = Array.isArray(val.readChapters) ? val.readChapters : [];
+      const lastCh = chapters[chapters.length - 1];
+      list.push({
+        type: 'manga',
+        key: cleanKey,
+        storageKey: key,
+        title: val.title || cleanKey,
+        url: val.url || cleanKey,
+        source: val.source || 'onepiecepower',
+        language: val.language || 'it',
+        count: chapters.length,
+        lastAccessedAt: val.lastReadAt || null,
+        lastItem: lastCh ? (lastCh.title || `Capitolo ${lastCh.id}`) : null
+      });
+    }
+  }
+
+  list.sort((a, b) => {
+    const timeA = new Date(a.lastAccessedAt || 0).getTime();
+    const timeB = new Date(b.lastAccessedAt || 0).getTime();
+    return timeB - timeA;
+  });
+
+  return list;
+}
+
 module.exports = {
   isChapterRead,
   markChapterRead,
@@ -355,6 +406,7 @@ module.exports = {
   getLastWatchedEpisode,
   getNextEpisodeToWatch,
   clearHistory,
+  getAllHistory,
   HISTORY_FILE
 };
 

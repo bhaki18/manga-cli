@@ -25,7 +25,15 @@ class AnimePlayer {
   /**
    * Detects the best available video player on the system
    */
-  async detectPlayer() {
+  async detectPlayer(preferredPlayer = null) {
+    if (preferredPlayer) {
+      const exists = await new Promise((res) => {
+        const p = spawn('which', [preferredPlayer]);
+        p.on('close', (code) => res(code === 0));
+      });
+      if (exists) return preferredPlayer;
+    }
+
     const candidateCommands = ['mpv', 'vlc', 'ffplay'];
     for (const cmd of candidateCommands) {
       const exists = await new Promise((res) => {
@@ -43,10 +51,11 @@ class AnimePlayer {
    * @param {string} animeTitle 
    * @param {string} episodeTitle 
    * @param {string} referer 
+   * @param {object} options
    * @returns {Promise<{ success: boolean, code: number }>}
    */
-  async play(videoUrl, animeTitle = '', episodeTitle = '', referer = 'https://onepiecepower.com/') {
-    const playerType = await this.detectPlayer();
+  async play(videoUrl, animeTitle = '', episodeTitle = '', referer = 'https://onepiecepower.com/', options = {}) {
+    const playerType = await this.detectPlayer(options.player);
     const title = `${animeTitle}${episodeTitle ? ' - ' + episodeTitle : ''}`;
 
     return new Promise((resolve, reject) => {
@@ -59,21 +68,30 @@ class AnimePlayer {
           `--http-header-fields=Referer: ${referer}`,
           '--force-window=immediate',
           '--save-position-on-quit',
-          '--term-osd-bar',
-          videoUrl
+          '--term-osd-bar'
         ];
+        if (options.fullscreen) {
+          args.push('--fs');
+        }
+        args.push(videoUrl);
       } else if (playerType === 'vlc') {
         args = [
           `--meta-title=${title}`,
-          `--http-referrer=${referer}`,
-          videoUrl
+          `--http-referrer=${referer}`
         ];
+        if (options.fullscreen) {
+          args.push('--fullscreen');
+        }
+        args.push(videoUrl);
       } else if (playerType === 'ffplay') {
         args = [
           '-window_title', title,
-          '-headers', `Referer: ${referer}\r\n`,
-          videoUrl
+          '-headers', `Referer: ${referer}\r\n`
         ];
+        if (options.fullscreen) {
+          args.push('-fs');
+        }
+        args.push(videoUrl);
       } else {
         // Fallback xdg-open
         cmd = 'xdg-open';

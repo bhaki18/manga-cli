@@ -89,6 +89,17 @@ class OnePiecePowerProvider extends BaseProvider {
   }
 
   /**
+   * Pick a random manga from catalog
+   */
+  async getRandomManga(lang = null) {
+    const catalog = await this.getCatalog();
+    const filtered = lang && lang !== 'all' ? catalog.filter(m => m.language === lang) : catalog;
+    if (filtered.length === 0) return null;
+    const idx = Math.floor(Math.random() * filtered.length);
+    return filtered[idx];
+  }
+
+  /**
    * Get all chapters from a manga's chapter list page
    */
   async getChapters(mangaUrl) {

@@ -1,6 +1,6 @@
 # 📖 Manga & Anime CLI 🎬
 
-> A fast and lightweight interactive terminal CLI to search and read **manga** online with RAM caching and stream **anime** episodes directly in high quality, inspired by `ani-cli`.
+> A fast, lightweight, and powerful interactive terminal CLI to search and read **manga** online with RAM caching, stream **anime** episodes directly in high quality, and download chapters/episodes for offline viewing, inspired by `ani-cli`.
 
 ---
 
@@ -13,14 +13,20 @@
 - 🧠 **Zero Disk Writes (RAM Caching)**: Pages are downloaded straight into RAM (`/dev/shm` on Linux) and wiped instantly upon closing, keeping your disk clean and wear-free.
 - 🖼️ **Multi-Viewer Support**: Seamless integration with your favourite graphical viewer (`mpv` via IPC socket, `feh` via inotify auto-reload, `sxiv`, `imv`, or `loupe`).
 - ⏭️ **Continuous Reading**: Instantly jump to the next chapter at the press of a key once finished.
-- ✅ **Read Chapters Tracker**: Displays a green `[✓]` mark beside chapters you have already read.
+- 📥 **Offline Chapter Downloads**: Download full chapters to your disk with a single flag (`-d, --download`).
+- 🔢 **Direct Chapter Jumps**: Jump straight to any chapter number with `-C, --chapter <num>`.
 
-### 🎬 Anime Streaming *(New in v2.0)*
+### 🎬 Anime Streaming
 - 🍿 **200+ Anime Series & Movies**: Full streaming archive including *One Piece* (1,200+ episodes), *Attack on Titan*, *Bleach*, *Demon Slayer*, *Jujutsu Kaisen*, *Solo Leveling*, *Chainsaw Man*, *Dragon Ball*, *Naruto*, and hundreds more!
 - 🇮🇹 / 🇯🇵 **Dual Audio Track Support**: Switch effortlessly between Italian Dubbed (**ITA**) and Japanese with Italian Subtitles (**SUB ITA**).
-- ⚡ **Direct Fast CDN Streaming**: Direct 1080p stream playback with instant seeking via `mpv` (or `vlc` / `ffplay`).
+- ⚡ **Direct Fast CDN Streaming**: Direct 1080p MP4 stream playback with instant seeking via `mpv` (or `vlc` / `ffplay`).
+- 📥 **Offline Episode Downloads**: Download full 1080p episodes with progress bar via `-d, --download`.
+- 🔢 **Direct Episode Jumps**: Jump straight to any episode number with `-e, --episode <num>`.
+- 🔗 **Direct Stream Extraction (`-g, --get-url`)**: Print pure stream URLs to stdout for scripting and piping into external tools.
 - ⏭️ **Continuous Binge Watching**: Auto-advance to the next episode with a single keystroke when the current episode ends.
 - 💾 **Resume Progress & State**: Remembers your playback position and marks watched episodes with `[✓]`.
+- 📜 **Interactive History Explorer**: View your reading and watch history with `-H, --history` and resume instantly.
+- 🎲 **Random Picker**: Pick a random manga or anime from the catalog with `-r, --random`.
 - 🔗 **Dual CLI Alias**: Launch as `manga-cli` or `anime-cli`.
 
 ---
@@ -64,66 +70,178 @@ sudo npm link
 
 ---
 
-## 🚀 Usage
+## 🚀 Usage & Commands
 
 ### Interactive Hub
-Simply run `manga-cli` with no arguments to pick between Manga and Anime:
+Simply run `manga-cli` with no arguments to pick between Manga, Anime, History, or Random:
 
 ```bash
 manga-cli
 ```
 
-### 🎬 Watch Anime
+---
+
+### 🎬 Anime Streaming
 
 ```bash
-# Launch directly in Anime mode
-manga-cli -a
-# or use the anime-cli alias
+# Launch interactive Anime mode
 anime-cli
+manga-cli -a
 
-# Search anime title directly
-manga-cli "one piece" -a
+# Search and stream directly
 anime-cli "demon slayer"
-manga-cli anime "jujutsu kaisen"
+manga-cli "one piece" -a
 
-# Choose audio preference
+# Jump directly to a specific episode without prompts
+anime-cli "one piece" -e 1071
+manga-cli "chainsaw man" -a -e 1
+
+# Choose audio preference (ITA Dubbed vs SUB ITA)
 manga-cli "attack on titan" -a --dub   # Italian Dub (Doppiato ITA)
-manga-cli "attack on titan" -a --sub   # Japanese Audio with Italian Subtitles (SUB ITA)
+manga-cli "attack on titan" -a --sub   # Japanese with Italian Subtitles (SUB ITA)
 
-# Resume next unread/unwatched episode or chapter
-manga-cli -c
-manga-cli -a -c
+# Launch player directly in fullscreen
+anime-cli "bleach" -e 1 -f
+
+# Force a specific media player (mpv, vlc, ffplay)
+anime-cli "naruto" -p vlc
 ```
 
-### 📖 Read Manga
+---
+
+### 📖 Manga Reading
 
 ```bash
-# Launch directly in Manga mode
+# Launch interactive Manga mode
 manga-cli -m
 
-# Search manga directly with language flags
+# Search manga with language filters
 manga-cli "one piece" --lang it      # Italian scans
-manga-cli "one piece" --lang en      # English scans
-manga-cli "berserk"                  # Global search (shows [ITA] and [ENG] badges)
+manga-cli "berserk" --lang en        # English scans
 
-# Resume next unread chapter
+# Jump directly to a specific chapter
+manga-cli "one piece" -m -C 1000
+
+# Force a specific image viewer (feh, sxiv, imv, mpv, loupe)
+manga-cli "berserk" -v feh -f
+```
+
+---
+
+### 📥 Offline Downloads (`-d, --download`)
+
+Download full manga chapters or anime episodes directly to `~/Downloads/`:
+
+```bash
+# Download an anime episode
+anime-cli "chainsaw man" -e 1 -d
+# Download to a custom destination directory
+anime-cli "one piece" -e 1050 -d "/path/to/downloads"
+
+# Download a manga chapter
+manga-cli "one piece" -m -C 1000 -d
+```
+
+---
+
+### 🔗 Scripting & Pure Stream Extraction (`-g, --get-url`)
+
+Print pure stream URLs or image URLs to stdout without opening any GUI players (great for piping):
+
+```bash
+# Get direct MP4 video stream URL
+anime-cli "one piece" -e 1071 -g
+
+# Pipe directly into MPV or aria2c
+mpv (anime-cli "one piece" -e 1071 -g)
+aria2c (anime-cli "chainsaw man" -e 1 -g)
+
+# Get direct manga chapter image URLs
+manga-cli "one piece" -m -C 1 -g
+```
+
+---
+
+### 📜 History Explorer & Auto-Resume (`-H`, `-c`)
+
+```bash
+# Open interactive history explorer (displays read chapters & watched episodes)
+manga-cli -H
+manga-cli history
+
+# Auto-resume from next unread chapter or watched episode
+manga-cli -c
+anime-cli -c
 manga-cli -m -c
 ```
 
-### 🗑️ History Management
+---
+
+### 🎲 Random Title Picker (`-r, --random`)
 
 ```bash
-# Interactively clear history or specify target
-manga-cli -D
-manga-cli -a -D     # Clear anime watch history
-manga-cli -m -D     # Clear manga read history
+# Pick and open a random title
+manga-cli -r            # Random Manga or Anime
+anime-cli -r            # Random Anime from catalog
+manga-cli -m -r         # Random Manga from catalog
 ```
+
+---
+
+### ℹ️ Info & Catalog Listing (`-i`, `--list`)
+
+```bash
+# View metadata, genres, and total episodes/chapters without opening viewer
+anime-cli "demon slayer" -i
+manga-cli "one piece" -m -i
+
+# List all matching titles in catalog
+anime-cli --list "dragon ball"
+manga-cli -m --list "jojos"
+```
+
+---
+
+### 🗑️ History Deletion (`-D, --delete`)
+
+```bash
+manga-cli -D         # Interactive deletion menu
+manga-cli -a -D      # Delete only watched anime history
+manga-cli -m -D      # Delete only read manga history
+```
+
+---
+
+## 📋 Full Command-Line Options Reference
+
+| Option | Description |
+| :--- | :--- |
+| `-a, --anime` | Watch anime stream |
+| `-m, --manga` | Read manga chapters |
+| `-l, --lang <code\>` | Filter by scan/catalog language (e.g. `it`, `en`, `es`, `fr`, `ja`) |
+| `--dub` | Prefer Italian dubbed audio (ITA) for anime |
+| `--sub` | Prefer Japanese audio with Italian subtitles (SUB ITA) |
+| `-e, --episode <num\>` | Jump directly to episode number |
+| `-C, --chapter <num\>` | Jump directly to chapter number |
+| `-d, --download [dir]` | Download chapter pages or anime episode `.mp4` for offline viewing |
+| `-g, --get-url` | Print direct streaming/image URLs to stdout and exit |
+| `-H, --history` | Display read/watched history with interactive resume |
+| `-r, --random` | Pick and open a random manga or anime title |
+| `-i, --info` | Display title metadata and total chapters/episodes without opening player |
+| `--list` | List all matching titles from catalog and exit |
+| `-p, --player <name\>` | Force media player (`mpv`, `vlc`, `ffplay`, `xdg-open`) |
+| `-v, --viewer <name\>` | Force image viewer (`feh`, `sxiv`, `imv`, `mpv`, `loupe`) |
+| `-f, --fullscreen` | Launch player or viewer in fullscreen mode |
+| `-c, --continue` | Auto-resume next unread chapter or watched episode |
+| `-D, --delete` | Clear read chapters and watched anime history |
+| `-V, --version` | Output version number |
+| `-h, --help` | Display command-line help |
 
 ---
 
 ## 👁️ Supported Players & Viewers
 
-- **Anime Streaming**: `mpv` (recommended, with keyboard shortcuts, volume, seeking, and resume), `vlc`, `ffplay`.
+- **Anime Streaming**: `mpv` (recommended: keyboard shortcuts, volume, seeking, and resume), `vlc`, `ffplay`.
 - **Manga Reader**: `feh`, `mpv`, `sxiv`, `imv`, `loupe`.
 
 ---

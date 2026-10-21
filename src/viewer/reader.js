@@ -60,7 +60,15 @@ class MangaViewer {
   /**
    * Detects the best available viewer on system
    */
-  async detectViewer() {
+  async detectViewer(preferredViewer = null) {
+    if (preferredViewer) {
+      const exists = await new Promise((res) => {
+        const p = spawn('which', [preferredViewer]);
+        p.on('close', (code) => res(code === 0));
+      });
+      if (exists) return preferredViewer;
+    }
+
     const candidateCommands = ['feh', 'sxiv', 'imv', 'mpv', 'loupe'];
     for (const cmd of candidateCommands) {
       const exists = await new Promise((res) => {
@@ -75,7 +83,7 @@ class MangaViewer {
   /**
    * Open reader instantly on page 1, streaming and appending pages in real time
    */
-  async streamAndRead(pages, referer, onProgress) {
+  async streamAndRead(pages, referer, onProgress, options = {}) {
     // Resolve page1 immediately
     let page1Url = Array.isArray(pages) ? pages[0] : (pages.page1 || (pages.pages && pages.pages[0]));
     if (!page1Url) throw new Error('No pages found for this chapter');
@@ -84,17 +92,21 @@ class MangaViewer {
     const page1Path = await this.downloadSinglePage(page1Url, 1, referer);
     if (onProgress) onProgress(1, Array.isArray(pages) ? pages.length : 1, false);
 
-    const viewerType = await this.detectViewer();
+    const viewerType = await this.detectViewer(options.viewer);
     let viewerProc;
 
     if (viewerType === 'mpv') {
-      // MPV with dynamic IPC socket playlist injection
-      viewerProc = spawn('mpv', [
+      const mpvArgs = [
         '--input-ipc-server=' + this.mpvSocket,
         '--image-display-duration=inf',
-        '--reset-on-next-file=pause',
-        page1Path
-      ], { stdio: 'inherit' });
+        '--reset-on-next-file=pause'
+      ];
+      if (options.fullscreen) {
+        mpvArgs.push('--fs');
+      }
+      mpvArgs.push(page1Path);
+
+      viewerProc = spawn('mpv', mpvArgs, { stdio: 'inherit' });
 
       const connectIpc = () => new Promise((resolve) => {
         const checkInterval = setInterval(() => {
@@ -161,14 +173,19 @@ class MangaViewer {
       })();
     } else {
       // For image gallery viewers (feh, sxiv, imv, loupe):
-      // Launch directly pointing to the RAM directory with auto-reload flags
       let args = [];
       if (viewerType === 'feh') {
-        args = ['-F', '--scale-down', '--auto-reload', this.activeDir];
+        args = ['--scale-down', '--auto-reload'];
+        if (options.fullscreen !== false) args.unshift('-F');
+        args.push(this.activeDir);
       } else if (viewerType === 'sxiv') {
-        args = ['-f', '-b', this.activeDir];
+        args = ['-b'];
+        if (options.fullscreen) args.unshift('-f');
+        args.push(this.activeDir);
       } else if (viewerType === 'imv') {
-        args = [this.activeDir];
+        args = [];
+        if (options.fullscreen) args.push('-f');
+        args.push(this.activeDir);
       } else if (viewerType === 'loupe') {
         args = [page1Path];
       } else {

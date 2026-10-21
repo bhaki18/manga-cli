@@ -123,6 +123,17 @@ class OnePiecePowerAnimeProvider extends BaseProvider {
   }
 
   /**
+   * Pick a random anime from catalog
+   */
+  async getRandomAnime(lang = null) {
+    const catalog = await this.getCatalog();
+    const filtered = lang && lang !== 'all' ? catalog.filter(a => a.language === lang) : catalog;
+    if (filtered.length === 0) return null;
+    const idx = Math.floor(Math.random() * filtered.length);
+    return filtered[idx];
+  }
+
+  /**
    * Get all episodes for an anime series
    * @param {string} animeUrl 
    */

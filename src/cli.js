@@ -25,8 +25,14 @@ const {
   markEpisodeWatched,
   getLastWatchedAnime,
   getNextEpisodeToWatch,
-  clearHistory
+  clearHistory,
+  getAllHistory
 } = require('./utils/history');
+
+const {
+  downloadMangaChapter,
+  downloadAnimeEpisode
+} = require('./utils/downloader');
 
 // Register autocomplete prompt in inquirer
 inquirer.registerPrompt('autocomplete', require('inquirer-autocomplete-prompt'));
@@ -42,20 +48,66 @@ const animePlayer = new AnimePlayer();
 
 program
   .name('manga-cli')
-  .description('Universal Terminal CLI to read Manga and stream Anime with instant playback and RAM caching')
+  .description('Universal Terminal CLI to read Manga and stream Anime with instant playback, downloading, and RAM caching')
   .version('2.0.0')
-  .argument('[query]', 'Search manga or anime by title')
+  .argument('[query]', 'Search manga or anime by title (or subcommand: watch, read, download, history, random, info)')
+  // Target mode
   .option('-a, --anime', 'Watch anime stream')
   .option('-m, --manga', 'Read manga chapters')
-  .option('-l, --lang <language>', 'Filter by language code (e.g. it, en, es, fr, ja)', null)
+  .option('-l, --lang <language>', 'Filter by scan/catalog language code (e.g. it, en, es, fr, ja)', null)
   .option('--dub', 'Prefer Italian dubbed audio (ITA) for anime')
   .option('--sub', 'Prefer Italian subtitled audio (SUB ITA) for anime')
+  // Direct selection
+  .option('-e, --episode <number>', 'Direct episode number to stream or download')
+  .option('-C, --chapter <number>', 'Direct chapter number to read or download')
+  // Actions
+  .option('-d, --download [dir]', 'Download chapter pages or anime episode .mp4 for offline viewing')
+  .option('-g, --get-url', 'Print direct streaming URL or page URLs to stdout and exit (script-friendly)')
+  .option('-H, --history', 'Display read/watched history with interactive resume')
+  .option('-r, --random', 'Pick and open a random manga or anime title')
+  .option('-i, --info', 'Display title metadata and total chapters/episodes without opening player')
+  .option('--list', 'List all matching titles from catalog and exit')
+  // Player & Viewer options
+  .option('-p, --player <name>', 'Force specific media player (e.g. mpv, vlc, ffplay, xdg-open)')
+  .option('-v, --viewer <name>', 'Force specific image viewer (e.g. feh, sxiv, imv, mpv, loupe)')
+  .option('-f, --fullscreen', 'Launch player or viewer in fullscreen mode')
+  // State
   .option('-c, --continue', 'Automatically continue reading / watching from next unread chapter or episode')
   .option('-D, --delete', 'Clear read chapters and watched anime history')
 
   .action(async (query, options) => {
     try {
-      // 1. Handle deletion of history
+      // 0. Subcommand alias resolution
+      const firstArg = (query || '').toLowerCase().trim();
+      let subQuery = process.argv[3] && !process.argv[3].startsWith('-') ? process.argv[3] : null;
+
+      if (firstArg === 'history' || firstArg === 'hist') {
+        options.history = true;
+        query = null;
+      } else if (firstArg === 'random' || firstArg === 'rand') {
+        options.random = true;
+        query = null;
+      } else if (firstArg === 'watch' || firstArg === 'anime') {
+        options.anime = true;
+        query = subQuery;
+      } else if (firstArg === 'read' || firstArg === 'manga') {
+        options.manga = true;
+        query = subQuery;
+      } else if (firstArg === 'download' || firstArg === 'dl') {
+        options.download = true;
+        query = subQuery;
+      } else if (firstArg === 'info') {
+        options.info = true;
+        query = subQuery;
+      }
+
+      // 1. History view command
+      if (options.history) {
+        await handleHistoryFlow(options);
+        process.exit(0);
+      }
+
+      // 2. Handle deletion of history
       if (options.delete) {
         if (options.anime) {
           clearHistory('anime');
@@ -85,9 +137,12 @@ program
         process.exit(0);
       }
 
-      console.log(chalk.bold.cyan('\n  📖 MANGA-CLI 2.0 - Universal Terminal Manga & Anime Hub 🎬\n'));
+      // Banner (suppressed in script-friendly get-url mode)
+      if (!options.getUrl) {
+        console.log(chalk.bold.cyan('\n  📖 MANGA-CLI 2.0 - Universal Terminal Manga & Anime Hub 🎬\n'));
+      }
 
-      // Check if invoked via 'anime-cli' symlink or with 'anime' / 'manga' subcommand
+      // Check if invoked via 'anime-cli' symlink
       const isAnimeBinary = path.basename(process.argv[1] || '').includes('anime');
       let mode = null;
 
@@ -95,12 +150,6 @@ program
         mode = 'anime';
       } else if (options.manga) {
         mode = 'manga';
-      } else if (query === 'anime') {
-        mode = 'anime';
-        query = process.argv[3] && !process.argv[3].startsWith('-') ? process.argv[3] : null;
-      } else if (query === 'manga') {
-        mode = 'manga';
-        query = process.argv[3] && !process.argv[3].startsWith('-') ? process.argv[3] : null;
       }
 
       // If user typed `-c` / `--continue` with no mode specified, auto-detect from recent activity
@@ -119,9 +168,12 @@ program
         }
       }
 
-      // If still no mode determined, prompt interactively
+      // If still no mode determined, prompt interactively (or check options)
       if (!mode) {
-        if (query) {
+        if (options.getUrl || options.info || options.list) {
+          // Default to manga if not specified
+          mode = 'manga';
+        } else if (query) {
           const modePrompt = await inquirer.prompt([
             {
               type: 'list',
@@ -142,11 +194,22 @@ program
               message: 'What would you like to do?',
               choices: [
                 { name: '📖 Read Manga (Leggi Manga)', value: 'manga' },
-                { name: '🎬 Watch Anime (Guarda Anime)', value: 'anime' }
+                { name: '🎬 Watch Anime (Guarda Anime)', value: 'anime' },
+                { name: '📜 View Reading / Watch History (Cronologia)', value: 'history' },
+                { name: '🎲 Pick Random Manga or Anime (Casuale)', value: 'random' }
               ]
             }
           ]);
-          mode = modePrompt.mode;
+
+          if (modePrompt.mode === 'history') {
+            await handleHistoryFlow(options);
+            process.exit(0);
+          } else if (modePrompt.mode === 'random') {
+            options.random = true;
+            mode = Math.random() > 0.5 ? 'anime' : 'manga';
+          } else {
+            mode = modePrompt.mode;
+          }
         }
       }
 
@@ -157,7 +220,9 @@ program
         await handleMangaFlow(query, options);
       }
 
-      console.log(chalk.cyan('\nThank you for using manga-cli! See you next time. 👋'));
+      if (!options.getUrl) {
+        console.log(chalk.cyan('\nThank you for using manga-cli! See you next time. 👋'));
+      }
     } catch (err) {
       if (err.name === 'ExitPromptError') {
         console.log(chalk.yellow('\nOperation cancelled.'));
@@ -171,18 +236,93 @@ program
   });
 
 // ====================================================================
+// HISTORY FLOW
+// ====================================================================
+async function handleHistoryFlow(options) {
+  const allHistory = getAllHistory();
+
+  console.log(chalk.bold.cyan('\n  📜 MANGA & ANIME HISTORY\n'));
+
+  if (allHistory.length === 0) {
+    console.log(chalk.yellow('ℹ️ No reading or watch history found.\n'));
+    return;
+  }
+
+  // Display summary table
+  allHistory.slice(0, 15).forEach(item => {
+    const isAnime = item.type === 'anime';
+    const badge = isAnime ? chalk.bgMagenta.bold(' ANIME ') : chalk.bgBlue.bold(' MANGA ');
+    const countLabel = isAnime ? `${item.count} eps watched` : `${item.count} chapters read`;
+    const lastDate = item.lastAccessedAt ? new Date(item.lastAccessedAt).toLocaleDateString() : '';
+
+    console.log(`${badge} ${chalk.bold(item.title)}`);
+    console.log(`       ${chalk.dim(`Last: ${item.lastItem || 'N/A'}`)} | ${chalk.green(countLabel)} | ${chalk.dim(lastDate)}`);
+  });
+
+  console.log('');
+
+  // Interactive resume from history
+  const historyChoices = allHistory.map(item => {
+    const icon = item.type === 'anime' ? '🎬' : '📖';
+    return {
+      name: `${icon} ${item.title} ${chalk.dim(`(Last: ${item.lastItem || 'N/A'})`)}`,
+      value: item
+    };
+  });
+  historyChoices.push(new inquirer.Separator());
+  historyChoices.push({ name: '🚪 Exit', value: null });
+
+  const choice = await inquirer.prompt([
+    {
+      type: 'autocomplete',
+      name: 'selected',
+      message: 'Select a title to resume reading/watching (or exit):',
+      pageSize: 10,
+      source: async (answersSoFar, input) => {
+        if (!input) return historyChoices;
+        const clean = input.toLowerCase();
+        return historyChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
+      }
+    }
+  ]);
+
+  if (!choice.selected) return;
+
+  const item = choice.selected;
+  if (item.type === 'anime') {
+    await handleAnimeFlow(item.title, { ...options, continue: true });
+  } else {
+    await handleMangaFlow(item.title, { ...options, continue: true });
+  }
+}
+
+// ====================================================================
 // ANIME FLOW
 // ====================================================================
 async function handleAnimeFlow(query, options) {
   let selectedAnime = null;
   let selectedLang = options.lang ? options.lang.toLowerCase() : null;
 
-  // 1. Check auto-resume
-  if (!query && options.continue) {
+  // 1. Random anime mode
+  if (options.random) {
+    const spinner = ora('Picking a random anime from catalog...').start();
+    selectedAnime = await oppAnimeProvider.getRandomAnime(selectedLang);
+    spinner.stop();
+    if (!selectedAnime) {
+      console.log(chalk.red('❌ Could not find an anime from the catalog.'));
+      return;
+    }
+    console.log(chalk.green(`🎲 Random Anime picked: ${chalk.bold(selectedAnime.title)}!\n`));
+  }
+
+  // 2. Check auto-resume
+  if (!selectedAnime && !query && options.continue) {
     const lastAnime = getLastWatchedAnime();
     const animeUrl = lastAnime ? (lastAnime.url || lastAnime.animeKey) : null;
     if (lastAnime && animeUrl) {
-      console.log(chalk.cyan(`🎬 [Auto-Resume] Found last watched anime: ${chalk.bold(lastAnime.title)}`));
+      if (!options.getUrl) {
+        console.log(chalk.cyan(`🎬 [Auto-Resume] Found last watched anime: ${chalk.bold(lastAnime.title)}`));
+      }
       selectedAnime = {
         title: lastAnime.title,
         url: animeUrl,
@@ -190,12 +330,12 @@ async function handleAnimeFlow(query, options) {
         language: lastAnime.language || 'it',
         audio: lastAnime.audio || 'both'
       };
-    } else {
+    } else if (!options.getUrl) {
       console.log(chalk.yellow('ℹ️ No previous anime found in history to resume from.\n'));
     }
   }
 
-  // 2. Search anime if not resuming
+  // 3. Search anime if not resuming or random
   if (!selectedAnime) {
     let searchQuery = query;
     if (!searchQuery) {
@@ -210,48 +350,60 @@ async function handleAnimeFlow(query, options) {
       searchQuery = inputAnswer.query;
     }
 
-    const spinner = ora(`Searching anime catalog for "${searchQuery}"...`).start();
+    const spinner = !options.getUrl ? ora(`Searching anime catalog for "${searchQuery}"...`).start() : null;
     const results = await oppAnimeProvider.search(searchQuery, selectedLang);
-    spinner.stop();
+    if (spinner) spinner.stop();
 
     if (results.length === 0) {
       console.log(chalk.red(`❌ No anime found matching "${searchQuery}".`));
       process.exit(0);
     }
 
-    const animeChoices = results.slice(0, 50).map(a => {
-      let badge = chalk.magenta('[OPPower]');
-      let audioBadge = '';
-      if (a.audio === 'both') audioBadge = chalk.yellow('[ITA/SUB]');
-      else if (a.audio === 'ita') audioBadge = chalk.green('[ITA]');
-      else if (a.audio === 'subita' || a.audio === 'sub') audioBadge = chalk.blue('[SUB ITA]');
+    // List mode: print and exit
+    if (options.list) {
+      console.log(chalk.bold(`\nFound ${results.length} matching anime titles:`));
+      results.forEach(r => console.log(` - ${r.title} [${r.audio.toUpperCase()}]`));
+      return;
+    }
 
-      return {
-        name: `${badge} ${audioBadge} ${chalk.bold(a.title)}`,
-        value: a
-      };
-    });
+    if (options.getUrl || options.info || options.episode) {
+      // Pick exact or first result if non-interactive
+      selectedAnime = results[0];
+    } else {
+      const animeChoices = results.slice(0, 50).map(a => {
+        let badge = chalk.magenta('[OPPower]');
+        let audioBadge = '';
+        if (a.audio === 'both') audioBadge = chalk.yellow('[ITA/SUB]');
+        else if (a.audio === 'ita') audioBadge = chalk.green('[ITA]');
+        else if (a.audio === 'subita' || a.audio === 'sub') audioBadge = chalk.blue('[SUB ITA]');
 
-    const animeAnswer = await inquirer.prompt([
-      {
-        type: 'autocomplete',
-        name: 'anime',
-        message: 'Select anime to watch (type to filter):',
-        pageSize: 10,
-        source: async (answersSoFar, input) => {
-          if (!input) return animeChoices;
-          const clean = input.toLowerCase();
-          return animeChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
+        return {
+          name: `${badge} ${audioBadge} ${chalk.bold(a.title)}`,
+          value: a
+        };
+      });
+
+      const animeAnswer = await inquirer.prompt([
+        {
+          type: 'autocomplete',
+          name: 'anime',
+          message: 'Select anime to watch (type to filter):',
+          pageSize: 10,
+          source: async (answersSoFar, input) => {
+            if (!input) return animeChoices;
+            const clean = input.toLowerCase();
+            return animeChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
+          }
         }
-      }
-    ]);
+      ]);
 
-    selectedAnime = animeAnswer.anime;
+      selectedAnime = animeAnswer.anime;
+    }
   }
 
   const animeKey = (selectedAnime.url || selectedAnime.title).toLowerCase().trim();
 
-  // 3. Audio track selection if anime has multiple tracks
+  // 4. Audio track selection
   let preferredAudio = 'subita';
   if (options.dub) {
     preferredAudio = 'ita';
@@ -261,7 +413,7 @@ async function handleAnimeFlow(query, options) {
     preferredAudio = 'ita';
   } else if (selectedAnime.audio === 'subita' || selectedAnime.audio === 'sub') {
     preferredAudio = 'subita';
-  } else if (selectedAnime.audio === 'both' || selectedAnime.title.includes('ITA/SUB ITA') || selectedAnime.title.includes('ITA / SUB ITA')) {
+  } else if (!options.getUrl && !options.info && (selectedAnime.audio === 'both' || selectedAnime.title.includes('ITA/SUB ITA') || selectedAnime.title.includes('ITA / SUB ITA'))) {
     const audioAnswer = await inquirer.prompt([
       {
         type: 'list',
@@ -276,19 +428,70 @@ async function handleAnimeFlow(query, options) {
     preferredAudio = audioAnswer.audio;
   }
 
-  // 4. Fetch episodes
-  const spinner = ora(`Loading episodes for ${selectedAnime.title}...`).start();
+  // 5. Fetch episodes
+  const spinner = !options.getUrl ? ora(`Loading episodes for ${selectedAnime.title}...`).start() : null;
   const episodes = await oppAnimeProvider.getEpisodes(selectedAnime.url);
-  spinner.stop();
+  if (spinner) spinner.stop();
 
   if (episodes.length === 0) {
     console.log(chalk.red('❌ No episodes available for this anime series.'));
     process.exit(0);
   }
 
-  console.log(chalk.green(`✔ Found ${episodes.length} episodes!\n`));
+  // Info mode: print details and exit
+  if (options.info) {
+    console.log(chalk.bold.green(`\n📺 ${selectedAnime.title}`));
+    console.log(`   Source: One Piece Power`);
+    console.log(`   Language: ${selectedAnime.language || 'it'} (Audio: ${selectedAnime.audio})`);
+    console.log(`   Total episodes: ${episodes.length}`);
+    console.log(`   URL: ${selectedAnime.url}\n`);
+    return;
+  }
 
-  // 5. Episode playback loop
+  if (!options.getUrl) {
+    console.log(chalk.green(`✔ Found ${episodes.length} episodes!\n`));
+  }
+
+  // 6. Direct episode selection via -e / --episode
+  if (options.episode) {
+    const targetNum = String(options.episode).trim();
+    const foundEp = episodes.find(e => {
+      const eNum = String(e.id || '').trim();
+      return eNum === targetNum || e.title.startsWith(targetNum) || e.title.includes(` ${targetNum} `) || e.title.startsWith(`0${targetNum}`) || e.title.startsWith(`00${targetNum}`);
+    });
+
+    if (!foundEp) {
+      console.log(chalk.red(`❌ Episode "${targetNum}" not found for this anime.`));
+      process.exit(1);
+    }
+
+    const streamData = await oppAnimeProvider.getEpisodeStream(foundEp.url, preferredAudio);
+    if (!streamData || !streamData.streamUrl) {
+      console.log(chalk.red(`❌ Unable to extract video stream for episode ${targetNum}.`));
+      process.exit(1);
+    }
+
+    if (options.getUrl) {
+      console.log(streamData.streamUrl);
+      process.exit(0);
+    }
+
+    if (options.download) {
+      const destDir = typeof options.download === 'string' ? options.download : null;
+      await downloadAnimeEpisode(streamData.streamUrl, selectedAnime.title, foundEp.title, 'https://onepiecepower.com/', destDir);
+      process.exit(0);
+    }
+
+    console.log(chalk.blue(`\n🚀 Launching Episode ${targetNum} in player...`));
+    await animePlayer.play(streamData.streamUrl, selectedAnime.title, foundEp.title, 'https://onepiecepower.com/', {
+      player: options.player,
+      fullscreen: options.fullscreen
+    });
+    markEpisodeWatched(animeKey, selectedAnime.title, foundEp, selectedAnime);
+    process.exit(0);
+  }
+
+  // 7. Interactive episode playback loop
   let keepWatching = true;
   let isFirstIteration = true;
   let currentEpisodes = episodes;
@@ -342,29 +545,44 @@ async function handleAnimeFlow(query, options) {
       selectedEpisode = epAnswer.episode;
     }
 
-    // 6. Resolve video stream
-    spinner.start(`Resolving high-speed video stream for "${selectedEpisode.title}"...`);
+    // 8. Resolve video stream
+    const spin = ora(`Resolving video stream for "${selectedEpisode.title}"...`).start();
     const streamData = await oppAnimeProvider.getEpisodeStream(selectedEpisode.url, preferredAudio);
-    spinner.stop();
+    spin.stop();
 
     if (!streamData || !streamData.streamUrl) {
       console.log(chalk.red(`❌ Unable to extract video stream for this episode.`));
       continue;
     }
 
-    console.log(chalk.blue(`\n🚀 Launching video stream in MPV player...`));
+    if (options.getUrl) {
+      console.log(streamData.streamUrl);
+      process.exit(0);
+    }
+
+    // Download mode
+    if (options.download) {
+      const destDir = typeof options.download === 'string' ? options.download : null;
+      await downloadAnimeEpisode(streamData.streamUrl, selectedAnime.title, selectedEpisode.title, 'https://onepiecepower.com/', destDir);
+      process.exit(0);
+    }
+
+    console.log(chalk.blue(`\n🚀 Launching video stream in player...`));
     console.log(chalk.dim(`   Title: ${selectedAnime.title} - ${selectedEpisode.title}`));
     console.log(chalk.dim(`   Stream: ${streamData.streamUrl}\n`));
 
-    // Play video stream
+    // Play video stream with player & fullscreen options
     await animePlayer.play(
       streamData.streamUrl,
       selectedAnime.title,
       selectedEpisode.title,
-      'https://onepiecepower.com/'
+      'https://onepiecepower.com/',
+      {
+        player: options.player,
+        fullscreen: options.fullscreen
+      }
     );
 
-    // Mark as watched
     markEpisodeWatched(animeKey, selectedAnime.title, selectedEpisode, selectedAnime);
     console.log(chalk.green(`✔ Marked "${selectedEpisode.title}" as watched.\n`));
 
@@ -376,6 +594,7 @@ async function handleAnimeFlow(query, options) {
 
       const nextActionChoices = [
         ...(nextEp ? [{ name: `⏩ Watch next episode (${nextEp.title})`, value: 'next' }] : []),
+        { name: '📥 Download this episode for offline', value: 'download' },
         { name: '📑 Choose another episode', value: 'choose' },
         { name: '🚪 Exit', value: 'exit' }
       ];
@@ -390,9 +609,9 @@ async function handleAnimeFlow(query, options) {
       ]);
 
       if (nextActionAnswer.action === 'next' && nextEp) {
-        spinner.start(`Resolving video stream for "${nextEp.title}"...`);
+        spin.start(`Resolving video stream for "${nextEp.title}"...`);
         const nextStream = await oppAnimeProvider.getEpisodeStream(nextEp.url, preferredAudio);
-        spinner.stop();
+        spin.stop();
 
         if (!nextStream || !nextStream.streamUrl) {
           console.log(chalk.red(`❌ Unable to extract video stream for next episode.`));
@@ -400,17 +619,23 @@ async function handleAnimeFlow(query, options) {
           continue;
         }
 
-        console.log(chalk.blue(`\n🚀 Streaming next episode in MPV player...`));
+        console.log(chalk.blue(`\n🚀 Streaming next episode in player...`));
         await animePlayer.play(
           nextStream.streamUrl,
           selectedAnime.title,
           nextEp.title,
-          'https://onepiecepower.com/'
+          'https://onepiecepower.com/',
+          {
+            player: options.player,
+            fullscreen: options.fullscreen
+          }
         );
 
         markEpisodeWatched(animeKey, selectedAnime.title, nextEp, selectedAnime);
         console.log(chalk.green(`✔ Marked "${nextEp.title}" as watched.\n`));
         selectedEpisode = nextEp;
+      } else if (nextActionAnswer.action === 'download') {
+        await downloadAnimeEpisode(streamData.streamUrl, selectedAnime.title, selectedEpisode.title, 'https://onepiecepower.com/');
       } else if (nextActionAnswer.action === 'choose') {
         inSubLoop = false;
       } else {
@@ -429,12 +654,26 @@ async function handleMangaFlow(query, options) {
   let selectedManga = null;
   let chosenProvider = oppProvider;
 
-  // 1. Resume directly from last read manga
-  if (!query && options.continue) {
+  // 1. Random manga mode
+  if (options.random) {
+    const spinner = ora('Picking a random manga from catalog...').start();
+    selectedManga = await oppProvider.getRandomManga(selectedLang);
+    spinner.stop();
+    if (!selectedManga) {
+      console.log(chalk.red('❌ Could not find a manga from the catalog.'));
+      return;
+    }
+    console.log(chalk.green(`🎲 Random Manga picked: ${chalk.bold(selectedManga.title)}!\n`));
+  }
+
+  // 2. Resume directly from last read manga
+  if (!selectedManga && !query && options.continue) {
     const lastManga = getLastReadManga();
     const mangaUrl = lastManga ? (lastManga.url || lastManga.mangaKey) : null;
     if (lastManga && mangaUrl) {
-      console.log(chalk.cyan(`📖 [Auto-Resume] Found last read manga: ${chalk.bold(lastManga.title)}`));
+      if (!options.getUrl) {
+        console.log(chalk.cyan(`📖 [Auto-Resume] Found last read manga: ${chalk.bold(lastManga.title)}`));
+      }
       selectedManga = {
         title: lastManga.title,
         url: mangaUrl,
@@ -444,14 +683,14 @@ async function handleMangaFlow(query, options) {
       if (!selectedLang && lastManga.language) {
         selectedLang = lastManga.language;
       }
-    } else {
+    } else if (!options.getUrl) {
       console.log(chalk.yellow('ℹ️ No previous manga found in history to resume from.\n'));
     }
   }
 
-  // 2. Select language and manga if not resuming
+  // 3. Select language and manga if not resuming
   if (!selectedManga) {
-    if (!selectedLang) {
+    if (!selectedLang && !options.getUrl) {
       const langChoices = [
         { name: '🇮🇹 Italian (Italiano)', value: 'it' },
         { name: '🇬🇧 English', value: 'en' },
@@ -483,6 +722,8 @@ async function handleMangaFlow(query, options) {
         }
       ]);
       selectedLang = langAnswer.language;
+    } else if (!selectedLang) {
+      selectedLang = 'it';
     }
 
     let searchQuery = query;
@@ -498,8 +739,8 @@ async function handleMangaFlow(query, options) {
       searchQuery = inputAnswer.query;
     }
 
-    const langLabel = selectedLang.toUpperCase();
-    const spinner = ora(`Searching manga for "${searchQuery}" [${langLabel}]...`).start();
+    const langLabel = (selectedLang || 'IT').toUpperCase();
+    const spinner = !options.getUrl ? ora(`Searching manga for "${searchQuery}" [${langLabel}]...`).start() : null;
 
     let results = [];
     if (selectedLang === 'it') {
@@ -513,43 +754,54 @@ async function handleMangaFlow(query, options) {
       const [mdResults, pillResults, oppResults] = await Promise.all(promises);
       results = [...pillResults, ...oppResults, ...mdResults];
     }
-    spinner.stop();
+    if (spinner) spinner.stop();
 
     if (results.length === 0) {
       console.log(chalk.red(`❌ No manga found for "${searchQuery}" in language [${selectedLang}].`));
       process.exit(0);
     }
 
-    const mangaChoices = results.slice(0, 50).map(m => {
-      const flag = getLanguageFlag(m.language || selectedLang);
-      let sourceLabel = chalk.magenta('[MangaDex]');
-      if (m.source === 'mangapill') {
-        sourceLabel = chalk.yellow('[Mangapill]');
-      } else if (m.source === 'onepiecepower' || !m.source) {
-        sourceLabel = chalk.blue('[OPPower]');
-      }
+    // List mode
+    if (options.list) {
+      console.log(chalk.bold(`\nFound ${results.length} matching manga titles:`));
+      results.forEach(r => console.log(` - ${r.title} [${r.source || 'OPPower'}]`));
+      return;
+    }
 
-      return {
-        name: `${flag} ${sourceLabel} ${chalk.bold(m.title)} ${m.author ? chalk.dim(`(Author: ${m.author})`) : ''}`,
-        value: m
-      };
-    });
-
-    const mangaAnswer = await inquirer.prompt([
-      {
-        type: 'autocomplete',
-        name: 'manga',
-        message: 'Select a manga (type to filter):',
-        pageSize: 10,
-        source: async (answersSoFar, input) => {
-          if (!input) return mangaChoices;
-          const clean = input.toLowerCase();
-          return mangaChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
+    if (options.getUrl || options.info || options.chapter) {
+      selectedManga = results[0];
+    } else {
+      const mangaChoices = results.slice(0, 50).map(m => {
+        const flag = getLanguageFlag(m.language || selectedLang);
+        let sourceLabel = chalk.magenta('[MangaDex]');
+        if (m.source === 'mangapill') {
+          sourceLabel = chalk.yellow('[Mangapill]');
+        } else if (m.source === 'onepiecepower' || !m.source) {
+          sourceLabel = chalk.blue('[OPPower]');
         }
-      }
-    ]);
 
-    selectedManga = mangaAnswer.manga;
+        return {
+          name: `${flag} ${sourceLabel} ${chalk.bold(m.title)} ${m.author ? chalk.dim(`(Author: ${m.author})`) : ''}`,
+          value: m
+        };
+      });
+
+      const mangaAnswer = await inquirer.prompt([
+        {
+          type: 'autocomplete',
+          name: 'manga',
+          message: 'Select a manga (type to filter):',
+          pageSize: 10,
+          source: async (answersSoFar, input) => {
+            if (!input) return mangaChoices;
+            const clean = input.toLowerCase();
+            return mangaChoices.filter(c => c.name && c.name.toLowerCase().includes(clean));
+          }
+        }
+      ]);
+
+      selectedManga = mangaAnswer.manga;
+    }
   }
 
   const mangaKey = (selectedManga.url || selectedManga.id || selectedManga.title).toLowerCase().trim();
@@ -562,18 +814,68 @@ async function handleMangaFlow(query, options) {
     chosenProvider = oppProvider;
   }
 
-  // 3. Fetch chapters
-  const spinner = ora(`Loading chapters for ${selectedManga.title}...`).start();
+  // 4. Fetch chapters
+  const spinner = !options.getUrl ? ora(`Loading chapters for ${selectedManga.title}...`).start() : null;
   const chapters = await chosenProvider.getChapters(selectedManga.url, selectedLang);
-  spinner.stop();
+  if (spinner) spinner.stop();
 
   if (chapters.length === 0) {
     console.log(chalk.red('❌ No chapters available for this manga in the selected language.'));
     process.exit(0);
   }
 
-  console.log(chalk.green(`✔ Found ${chapters.length} chapters!\n`));
+  // Info mode
+  if (options.info) {
+    console.log(chalk.bold.green(`\n📖 ${selectedManga.title}`));
+    console.log(`   Source: ${selectedManga.source || 'One Piece Power'}`);
+    console.log(`   Author: ${selectedManga.author || 'Unknown'}`);
+    console.log(`   Genres: ${selectedManga.genres || 'N/A'}`);
+    console.log(`   Total chapters: ${chapters.length}`);
+    console.log(`   URL: ${selectedManga.url}\n`);
+    return;
+  }
 
+  if (!options.getUrl) {
+    console.log(chalk.green(`✔ Found ${chapters.length} chapters!\n`));
+  }
+
+  // 5. Direct chapter selection via -C / --chapter
+  if (options.chapter) {
+    const targetCh = String(options.chapter).trim();
+    const foundCh = chapters.find(c => {
+      const cNum = String(c.number || c.id || '').trim();
+      return cNum === targetCh || c.title.includes(` ${targetCh} `) || c.title.includes(`Capitolo ${targetCh}`) || c.title.includes(`Chapter ${targetCh}`);
+    });
+
+    if (!foundCh) {
+      console.log(chalk.red(`❌ Chapter "${targetCh}" not found.`));
+      process.exit(1);
+    }
+
+    const chapterData = await chosenProvider.getChapterPages(foundCh.url);
+    const pagesList = chapterData.pages || (chapterData.page1 ? [chapterData.page1] : []);
+
+    if (options.getUrl) {
+      pagesList.forEach(p => console.log(p));
+      process.exit(0);
+    }
+
+    if (options.download) {
+      const destDir = typeof options.download === 'string' ? options.download : null;
+      await downloadMangaChapter(pagesList, selectedManga.title, foundCh.title, foundCh.url, destDir);
+      process.exit(0);
+    }
+
+    mangaViewer.prepareChapterDir(selectedManga.title, foundCh.id);
+    await mangaViewer.streamAndRead(chapterData.pages || chapterData, foundCh.url, null, {
+      viewer: options.viewer,
+      fullscreen: options.fullscreen
+    });
+    markChapterRead(mangaKey, selectedManga.title, foundCh, selectedManga);
+    process.exit(0);
+  }
+
+  // 6. Interactive chapter loop
   let currentChapters = chapters;
   let keepReading = true;
   let isFirstIteration = true;
@@ -627,10 +929,10 @@ async function handleMangaFlow(query, options) {
       selectedChapter = chapterAnswer.chapter;
     }
 
-    // 4. Extract pages
-    spinner.start(`Discovering pages for "${selectedChapter.title}"...`);
+    // 7. Extract pages
+    const dlSpin = ora(`Discovering pages for "${selectedChapter.title}"...`).start();
     const chapterData = await chosenProvider.getChapterPages(selectedChapter.url);
-    spinner.stop();
+    dlSpin.stop();
 
     if (chapterData.externalUrl) {
       console.log(chalk.yellow(`\nℹ️ This chapter is hosted externally on official publisher: MangaPlus`));
@@ -656,6 +958,19 @@ async function handleMangaFlow(query, options) {
       continue;
     }
 
+    if (options.getUrl) {
+      const pList = chapterData.pages || [chapterData.page1];
+      pList.forEach(p => console.log(p));
+      process.exit(0);
+    }
+
+    // Download mode
+    if (options.download) {
+      const destDir = typeof options.download === 'string' ? options.download : null;
+      await downloadMangaChapter(chapterData.pages || chapterData, selectedManga.title, selectedChapter.title, selectedChapter.url, destDir);
+      process.exit(0);
+    }
+
     console.log(chalk.blue('⚡ Streaming chapter in real time into RAM (/dev/shm)...'));
 
     mangaViewer.prepareChapterDir(selectedManga.title, selectedChapter.id);
@@ -671,6 +986,10 @@ async function handleMangaFlow(query, options) {
         } else {
           downloadSpinner.succeed(chalk.green(`All ${total} pages streamed into viewer!`));
         }
+      },
+      {
+        viewer: options.viewer,
+        fullscreen: options.fullscreen
       }
     );
 
@@ -685,6 +1004,7 @@ async function handleMangaFlow(query, options) {
 
       const nextActionChoices = [
         ...(nextChapter ? [{ name: `⏩ Read next chapter (${nextChapter.title})`, value: 'next' }] : []),
+        { name: '📥 Download this chapter for offline', value: 'download' },
         { name: '📑 Choose another chapter', value: 'choose' },
         { name: '🚪 Exit', value: 'exit' }
       ];
@@ -699,9 +1019,9 @@ async function handleMangaFlow(query, options) {
       ]);
 
       if (nextActionAnswer.action === 'next' && nextChapter) {
-        spinner.start(`Discovering pages for "${nextChapter.title}"...`);
+        dlSpin.start(`Discovering pages for "${nextChapter.title}"...`);
         const nextData = await chosenProvider.getChapterPages(nextChapter.url);
-        spinner.stop();
+        dlSpin.stop();
 
         if (nextData.externalUrl) {
           spawn('xdg-open', [nextData.externalUrl], { stdio: 'ignore' });
@@ -711,14 +1031,19 @@ async function handleMangaFlow(query, options) {
         }
 
         mangaViewer.prepareChapterDir(selectedManga.title, nextChapter.id);
-        const dlSpin = ora('Buffering page 1...').start();
+        const spin2 = ora('Buffering page 1...').start();
         console.log(chalk.magenta('🚀 Opening next chapter instantly!'));
         await mangaViewer.streamAndRead(nextData.pages || nextData, nextChapter.url, (done, total, isComplete) => {
-          if (isComplete) dlSpin.succeed(chalk.green(`All ${total} pages streamed into viewer!`));
+          if (isComplete) spin2.succeed(chalk.green(`All ${total} pages streamed into viewer!`));
+        }, {
+          viewer: options.viewer,
+          fullscreen: options.fullscreen
         });
 
         markChapterRead(mangaKey, selectedManga.title, nextChapter, selectedManga);
         selectedChapter = nextChapter;
+      } else if (nextActionAnswer.action === 'download') {
+        await downloadMangaChapter(chapterData.pages || chapterData, selectedManga.title, selectedChapter.title, selectedChapter.url);
       } else if (nextActionAnswer.action === 'choose') {
         inSubLoop = false;
       } else {
