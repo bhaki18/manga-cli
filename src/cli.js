@@ -72,6 +72,9 @@ program
   .option('-r, --random', 'Pick and open a random manga or anime title')
   .option('-i, --info', 'Display title metadata and total chapters/episodes without opening player')
   .option('--list', 'List all matching titles from catalog and exit')
+  .option('--catalog', 'Display catalog of titles (supports --anime, --manga, --source, --lang)')
+  .option('--catalog-anime', 'Display full anime catalog (or for a specific source with --source)')
+  .option('--catalog-manga', 'Display full manga catalog (or for a specific source with --source)')
   // History editing & management
   .option('--set-chapter <number>', 'Set last read manga chapter progress directly')
   .option('--set-episode <number>', 'Set last watched anime episode progress directly')
@@ -119,6 +122,28 @@ program
         const sourceAction = parts[1] || 'list';
         const extraArgs = parts.slice(2);
         await handleSourcesCommand(sourceAction, extraArgs, options);
+        return;
+      } else if (firstArg === 'catalog' || firstArg === 'catalogo') {
+        options.catalog = true;
+        const sub = (parts[1] || '').toLowerCase().trim();
+        if (sub === 'anime' || sub === '-a') {
+          options.anime = true;
+        } else if (sub === 'manga' || sub === '-m') {
+          options.manga = true;
+        }
+      }
+
+      // Catalog handling (full, manga, anime, or filtered by source)
+      if (options.catalogAnime) {
+        options.catalog = true;
+        options.anime = true;
+      }
+      if (options.catalogManga) {
+        options.catalog = true;
+        options.manga = true;
+      }
+      if (options.catalog) {
+        await handleCatalogCommand(options);
         return;
       }
 
@@ -640,6 +665,108 @@ async function handleHistoryFlow(options) {
         console.log(chalk.green(`✔ "${item.title}" removed from history.\n`));
       }
     }
+  }
+}
+
+// ====================================================================
+// CATALOG FLOW
+// ====================================================================
+async function handleCatalogCommand(options) {
+  let type = 'all';
+  if (options.anime && !options.manga) type = 'anime';
+  else if (options.manga && !options.anime) type = 'manga';
+
+  let typeDesc = 'completo (Manga & Anime)';
+  if (type === 'anime') typeDesc = 'Anime';
+  if (type === 'manga') typeDesc = 'Manga';
+
+  const sourceDesc = options.source ? ` [Fonte: ${options.source}]` : ' [Tutte le fonti]';
+  const langDesc = options.lang ? ` [Lingua: ${options.lang.toUpperCase()}]` : '';
+
+  const spinner = ora(`Caricamento catalogo ${typeDesc}${sourceDesc}${langDesc}...`).start();
+
+  try {
+    const catalog = await providerManager.getFullCatalog({
+      type,
+      source: options.source,
+      lang: options.lang
+    });
+    spinner.stop();
+
+    console.log(chalk.bold.cyan('\n📦 MANGA-CLI 2.0 - CATALOGO'));
+    if (options.source) {
+      console.log(chalk.gray(`Filtro fonte: ${options.source}`));
+    }
+    if (options.lang) {
+      console.log(chalk.gray(`Filtro lingua: ${options.lang}`));
+    }
+    console.log();
+
+    const mangaList = catalog.manga || [];
+    const animeList = catalog.anime || [];
+
+    // Manga section
+    if (type === 'all' || type === 'manga') {
+      console.log(chalk.bold.magenta(`═══════════════════════════════════════════════════════════`));
+      console.log(chalk.bold.magenta(`📖 CATALOGO MANGA (${mangaList.length} titoli)`));
+      console.log(chalk.bold.magenta(`═══════════════════════════════════════════════════════════`));
+
+      if (mangaList.length === 0) {
+        console.log(chalk.yellow('  (Nessun manga trovato per i filtri selezionati)\n'));
+      } else {
+        const grouped = {};
+        for (const item of mangaList) {
+          const src = item.sourceName || item.source || 'Built-in';
+          if (!grouped[src]) grouped[src] = [];
+          grouped[src].push(item);
+        }
+
+        for (const [srcName, items] of Object.entries(grouped)) {
+          console.log(chalk.bold.yellow(`\n  📂 [${srcName}] • ${items.length} titoli:`));
+          items.forEach((item, idx) => {
+            const langBadge = item.language ? chalk.dim(`[${item.language.toUpperCase()}]`) : '';
+            const genres = item.genres ? chalk.gray(`(${item.genres.slice(0, 45)})`) : '';
+            console.log(`    ${chalk.dim(String(idx + 1).padStart(4, ' '))}. ${chalk.bold(item.title)} ${langBadge} ${genres}`);
+          });
+        }
+        console.log();
+      }
+    }
+
+    // Anime section
+    if (type === 'all' || type === 'anime') {
+      console.log(chalk.bold.cyan(`═══════════════════════════════════════════════════════════`));
+      console.log(chalk.bold.cyan(`🎬 CATALOGO ANIME (${animeList.length} titoli)`));
+      console.log(chalk.bold.cyan(`═══════════════════════════════════════════════════════════`));
+
+      if (animeList.length === 0) {
+        console.log(chalk.yellow('  (Nessun anime trovato per i filtri selezionati)\n'));
+      } else {
+        const grouped = {};
+        for (const item of animeList) {
+          const src = item.sourceName || item.source || 'Built-in';
+          if (!grouped[src]) grouped[src] = [];
+          grouped[src].push(item);
+        }
+
+        for (const [srcName, items] of Object.entries(grouped)) {
+          console.log(chalk.bold.yellow(`\n  📂 [${srcName}] • ${items.length} titoli:`));
+          items.forEach((item, idx) => {
+            let audioBadge = '';
+            if (item.audio === 'both') audioBadge = chalk.yellow('[ITA/SUB]');
+            else if (item.audio === 'ita') audioBadge = chalk.green('[ITA]');
+            else if (item.audio === 'subita' || item.audio === 'sub') audioBadge = chalk.blue('[SUB ITA]');
+            console.log(`    ${chalk.dim(String(idx + 1).padStart(4, ' '))}. ${chalk.bold(item.title)} ${audioBadge}`);
+          });
+        }
+        console.log();
+      }
+    }
+
+    // Summary
+    console.log(chalk.green(`✔ Totale elementi catalogo: ${mangaList.length} manga, ${animeList.length} anime.\n`));
+  } catch (err) {
+    spinner.fail(`Errore durante il recupero del catalogo: ${err.message}`);
   }
 }
 

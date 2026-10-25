@@ -36,6 +36,22 @@ class BaseProvider {
   }
 
   /**
+   * Get catalog of available titles
+   * @param {string|null} lang
+   * @returns {Promise<Array<{ id: string, title: string, url: string, source: string, language?: string }>>}
+   */
+  async getCatalog(lang = null) {
+    if (typeof this.search === 'function') {
+      try {
+        return await this.search('', lang);
+      } catch (err) {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  /**
    * Search titles by keyword and optional language filter
    * @param {string} query
    * @param {string|null} lang

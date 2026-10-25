@@ -262,6 +262,150 @@ class ProviderManager {
     return results;
   }
 
+  /**
+   * Retrieves the manga catalog (either all providers or a specific provider)
+   */
+  async getMangaCatalog(sourceFilter = null, lang = null) {
+    let providers = this.getMangaProviders();
+
+    if (sourceFilter) {
+      const cleanFilter = String(sourceFilter).toLowerCase().trim();
+      providers = providers.filter(p => 
+        p.id.toLowerCase() === cleanFilter || 
+        p.name.toLowerCase().includes(cleanFilter)
+      );
+    } else if (lang) {
+      const cleanLang = lang.toLowerCase();
+      providers = providers.filter(p => {
+        if (cleanLang === 'all') return true;
+        return p.languages.includes(cleanLang) || p.languages.includes('all');
+      });
+    }
+
+    if (providers.length === 0) {
+      return [];
+    }
+
+    const promises = providers.map(async (provider) => {
+      try {
+        let items = [];
+        if (typeof provider.getCatalog === 'function') {
+          items = await provider.getCatalog(lang);
+        } else if (typeof provider.search === 'function') {
+          items = await provider.search('', lang);
+        }
+        if (!Array.isArray(items)) return [];
+        return items.map(item => ({
+          ...item,
+          type: 'manga',
+          source: item.source || provider.id,
+          sourceName: provider.name,
+          language: item.language || lang || (provider.languages[0] !== 'all' ? provider.languages[0] : 'en')
+        }));
+      } catch (err) {
+        return [];
+      }
+    });
+
+    const settled = await Promise.allSettled(promises);
+    const results = [];
+    for (const res of settled) {
+      if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+        results.push(...res.value);
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Retrieves the anime catalog (either all providers or a specific provider)
+   */
+  async getAnimeCatalog(sourceFilter = null, lang = null) {
+    let providers = this.getAnimeProviders();
+
+    if (sourceFilter) {
+      const cleanFilter = String(sourceFilter).toLowerCase().trim();
+      providers = providers.filter(p => 
+        p.id.toLowerCase() === cleanFilter || 
+        p.name.toLowerCase().includes(cleanFilter)
+      );
+    } else if (lang) {
+      const cleanLang = lang.toLowerCase();
+      providers = providers.filter(p => {
+        if (cleanLang === 'all') return true;
+        return p.languages.includes(cleanLang) || p.languages.includes('all');
+      });
+    }
+
+    if (providers.length === 0) {
+      return [];
+    }
+
+    const promises = providers.map(async (provider) => {
+      try {
+        let items = [];
+        if (typeof provider.getCatalog === 'function') {
+          items = await provider.getCatalog(lang);
+        } else if (typeof provider.search === 'function') {
+          items = await provider.search('', lang);
+        }
+        if (!Array.isArray(items)) return [];
+        return items.map(item => ({
+          ...item,
+          type: 'anime',
+          source: item.source || provider.id,
+          sourceName: provider.name,
+          language: item.language || lang || (provider.languages[0] !== 'all' ? provider.languages[0] : 'it')
+        }));
+      } catch (err) {
+        return [];
+      }
+    });
+
+    const settled = await Promise.allSettled(promises);
+    const results = [];
+    for (const res of settled) {
+      if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+        results.push(...res.value);
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Retrieves full catalog (Manga and/or Anime) according to options
+   * @param {{ type?: 'all'|'manga'|'anime', source?: string|null, lang?: string|null }} options
+   */
+  async getFullCatalog({ type = 'all', source = null, lang = null } = {}) {
+    const catalog = { manga: [], anime: [] };
+
+    // If a source is specified and type is 'all', check which type(s) this source belongs to
+    if (source && type === 'all') {
+      const cleanSource = String(source).toLowerCase().trim();
+      const hasManga = this.getMangaProviders().some(p => p.id.toLowerCase() === cleanSource || p.name.toLowerCase().includes(cleanSource));
+      const hasAnime = this.getAnimeProviders().some(p => p.id.toLowerCase() === cleanSource || p.name.toLowerCase().includes(cleanSource));
+
+      if (hasManga && !hasAnime) {
+        catalog.manga = await this.getMangaCatalog(source, lang);
+      } else if (hasAnime && !hasManga) {
+        catalog.anime = await this.getAnimeCatalog(source, lang);
+      } else {
+        catalog.manga = await this.getMangaCatalog(source, lang);
+        catalog.anime = await this.getAnimeCatalog(source, lang);
+      }
+      return catalog;
+    }
+
+    if (type === 'manga' || type === 'all') {
+      catalog.manga = await this.getMangaCatalog(source, lang);
+    }
+    if (type === 'anime' || type === 'all') {
+      catalog.anime = await this.getAnimeCatalog(source, lang);
+    }
+
+    return catalog;
+  }
+
   addProviderFromFileOrUrl(fileOrUrl) {
     this.ensureDir();
     const isUrl = fileOrUrl.startsWith('http://') || fileOrUrl.startsWith('https://');

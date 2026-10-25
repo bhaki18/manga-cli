@@ -25,7 +25,12 @@ class OnePiecePowerProvider extends BaseProvider {
       return this.mangaListCache;
     }
 
-    const html = await fetchHtml(`${this.baseUrl}/manga8/lista-manga2`);
+    let html;
+    try {
+      html = await fetchHtml(`${this.baseUrl}/manga8/lista-manga3`);
+    } catch {
+      html = await fetchHtml(`${this.baseUrl}/manga8/lista-manga2`);
+    }
     const $ = cheerio.load(html);
     const mangaList = [];
 

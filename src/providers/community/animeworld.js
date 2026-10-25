@@ -57,6 +57,41 @@ module.exports = ({ BaseAnimeProvider, cheerio, fetchHtml }) => {
     }
 
     /**
+     * Recupera il catalogo AnimeWorld (dalla lista alfabetica /az-list)
+     */
+    async getCatalog() {
+      try {
+        const html = await this.fetchHtml(`${this.baseUrl}/az-list`);
+        const $ = this.cheerio.load(html);
+        const results = [];
+
+        $('.film-list .item, .items .item, .content .item, .inner').each((_, el) => {
+          const a = $(el).find('a.name');
+          const href = a.attr('href');
+          const title = a.text().trim();
+
+          if (href && title) {
+            const isIta = title.toLowerCase().includes('(ita)');
+            const fullUrl = href.startsWith('http') ? href : `${this.baseUrl}${href}`;
+
+            results.push({
+              id: href,
+              title,
+              url: fullUrl,
+              audio: isIta ? 'ita' : 'subita',
+              language: 'it',
+              source: 'animeworld'
+            });
+          }
+        });
+
+        return results;
+      } catch (err) {
+        return [];
+      }
+    }
+
+    /**
      * 2. Estrae tutti gli episodi della serie
      * @param {string} animeUrl
      * @returns {Promise<Array<{ id: string, title: string, url: string, dataId?: string }>>}

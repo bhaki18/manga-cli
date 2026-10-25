@@ -8,11 +8,12 @@
 
 1. [Panoramica e Dove Risiedono i Plugin](#1-panoramica)
 2. [Comandi di Gestione (`manga-cli sources`)](#2-comandi-di-gestione)
-3. [Filtrare per Fonte durante l'uso](#3-filtrare-per-fonte)
-4. [Come Creare una Fonte Manga](#4-creare-una-fonte-manga)
-5. [Come Creare una Fonte Anime](#5-creare-una-fonte-anime)
-6. [Utility e Strumenti Inclusi nei Plugin](#6-utility-incluse)
-7. [Test e Risoluzione Problemi](#7-test-e-risoluzione-problemi)
+3. [Visualizzare i Cataloghi (Anime & Manga)](#3-visualizzare-i-cataloghi)
+4. [Filtrare per Fonte durante le Ricerche](#4-filtrare-per-fonte)
+5. [Come Creare una Fonte Manga](#5-creare-una-fonte-manga)
+6. [Come Creare una Fonte Anime](#6-creare-una-fonte-anime)
+7. [Utility e Strumenti Inclusi nei Plugin](#7-utility-incluse)
+8. [Test e Risoluzione Problemi](#8-test-e-risoluzione-problemi)
 
 ---
 
@@ -105,7 +106,59 @@ manga-cli sources path
 
 ---
 
-## 3. Filtrare per Fonte
+## 3. Visualizzare i Cataloghi (Anime & Manga)
+
+`manga-cli` include opzioni dedicate per mostrare a terminale l'intero catalogo dei titoli disponibili, raggruppati ordinatamente per fonte, completi di conteggio titoli, lingue e audio supportati:
+
+### 🎬 1. Mostrare l'intero catalogo Anime (tutte le fonti)
+```bash
+manga-cli --catalog-anime
+# oppure con sottocomando o flag combinato
+manga-cli catalog anime
+manga-cli -a --catalog
+```
+
+### 📖 2. Mostrare l'intero catalogo Manga (tutte le fonti)
+```bash
+manga-cli --catalog-manga
+# oppure con sottocomando o flag combinato
+manga-cli catalog manga
+manga-cli -m --catalog
+```
+
+### 🎯 3. Mostrare il catalogo (Anime o Manga) di una SPECIFICA fonte
+Aggiungi semplicemente `--source <id>` (o `-s <id>`):
+```bash
+# Catalogo anime di AnimeWorld
+manga-cli --catalog-anime --source animeworld
+# oppure
+manga-cli catalog anime --source animeworld
+
+# Catalogo manga di One Piece Power
+manga-cli --catalog-manga --source onepiecepower
+
+# Catalogo manga di Mangapill
+manga-cli --catalog-manga --source mangapill
+```
+
+### 📦 4. Mostrare il catalogo (sia Anime che Manga) di una SPECIFICA fonte
+Se la fonte ha sia anime che manga (o vuoi consultare tutto ciò che offre quel provider):
+```bash
+manga-cli --catalog --source onepiecepower
+manga-cli catalog --source animeworld
+```
+
+### 🌐 5. Mostrare l'intero catalogo Anime E Manga di TUTTE le fonti
+Stampa la panoramica completa aggregata di tutti i provider attivi:
+```bash
+manga-cli --catalog
+# oppure
+manga-cli catalog
+```
+
+---
+
+## 4. Filtrare per Fonte durante le Ricerche
 
 Quando effettui ricerche o avvii la lettura/visione, puoi specificare la fonte con l'opzione `-s` / `--source`:
 
@@ -127,7 +180,7 @@ Se non specifichi `--source`, `manga-cli` interroga **tutti** i provider attivi 
 
 ---
 
-## 4. Creare una Fonte Manga
+## 5. Creare una Fonte Manga
 
 Ogni fonte manga esporta una funzione che riceve la classe base e le utility:
 
@@ -221,7 +274,7 @@ module.exports = ({ BaseMangaProvider, cheerio, fetchHtml, fetchJson }) => {
 
 ---
 
-## 5. Creare una Fonte Anime
+## 6. Creare una Fonte Anime
 
 Per una fonte Anime, estendi `BaseAnimeProvider` e implementi la risoluzione dello stream video (`.mp4`, `.m3u8` HLS, ecc.):
 
@@ -303,7 +356,7 @@ module.exports = ({ BaseAnimeProvider, cheerio, fetchHtml, fetchJson }) => {
 
 ---
 
-## 6. Utility Incluse
+## 7. Utility Incluse
 
 I plugin hanno accesso a metodi ereditati dalla classe base:
 
@@ -313,11 +366,12 @@ I plugin hanno accesso a metodi ereditati dalla classe base:
 | `this.fetchJson(url, referer)` | Scarica e parsa automaticamente una risposta JSON da API REST. |
 | `this.checkUrlExists(url)` | Invia una richiesta `HEAD` veloce per verificare se un link è attivo (HTTP 200). |
 | `this.cheerio` | Istanza integrata della libreria `cheerio` (sintassi jQuery) per fare scraping di selettori CSS. |
+| `this.getCatalog(lang)` | (Opzionale) Restituisce la lista/catalogo completo di titoli offerti dalla fonte. Se non definito, effettua una ricerca a vuoto. |
 | `this.baseUrl` | L'URL base configurato nel costruttore. |
 
 ---
 
-## 7. Test e Risoluzione Problemi
+## 8. Test e Risoluzione Problemi
 
 1. **Verificare se il plugin viene caricato**:
    ```bash

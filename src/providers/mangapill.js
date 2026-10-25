@@ -56,6 +56,36 @@ class MangapillProvider extends BaseProvider {
   }
 
   /**
+   * Fetch recent/featured catalog from Mangapill
+   */
+  async getCatalog() {
+    try {
+      const html = await fetchHtml(`${this.baseUrl}/mangas/new`);
+      const $ = cheerio.load(html);
+      const results = [];
+      $('div.flex.flex-col.justify-end').each((_, el) => {
+        const a = $(el).find('a').first();
+        const href = a.attr('href');
+        const title = $(el).find('.font-black').text().trim();
+        const sub = $(el).find('.text-xs').text().trim();
+        if (href && title) {
+          results.push({
+            id: href,
+            title,
+            url: href.startsWith('http') ? href : `${this.baseUrl}${href}`,
+            genres: sub,
+            source: 'mangapill',
+            language: 'en'
+          });
+        }
+      });
+      return results;
+    } catch (err) {
+      return [];
+    }
+  }
+
+  /**
    * Get all chapters for a manga
    */
   async getChapters(mangaUrl, lang = null) {

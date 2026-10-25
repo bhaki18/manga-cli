@@ -269,7 +269,32 @@ manga-cli sources new "mio-anime" --anime   # Template Anime
 manga-cli sources remove animeworld
 ```
 
-📖 **Guida Completa**: Consulta [GUIDE.md](GUIDE.md) per tutti i dettagli su come sfogliare lo store o creare nuovi provider personalizzati.
+### 📚 Cataloghi Completi (`--catalog`, `--catalog-anime`, `--catalog-manga`)
+
+Visualizza a terminale l'intero catalogo dei titoli disponibili con conteggi, lingue e audio, aggregati o divisi per fonte:
+
+```bash
+# Mostra l'intero catalogo Anime di tutte le fonti
+manga-cli --catalog-anime
+# oppure: manga-cli catalog anime
+
+# Mostra l'intero catalogo Manga di tutte le fonti
+manga-cli --catalog-manga
+# oppure: manga-cli catalog manga
+
+# Mostra il catalogo anime o manga di una SPECIFICA fonte
+manga-cli --catalog-anime --source animeworld
+manga-cli --catalog-manga --source onepiecepower
+
+# Mostra il catalogo (anime e/o manga) di una specifica fonte
+manga-cli --catalog --source animeworld
+
+# Mostra l'intero catalogo globale (sia Anime che Manga di TUTTE le fonti)
+manga-cli --catalog
+# oppure: manga-cli catalog
+```
+
+📖 **Guida Completa**: Consulta [GUIDE.md](GUIDE.md) per tutti i dettagli su come sfogliare lo store, visualizzare i cataloghi o creare nuovi provider personalizzati.
 
 ---
 
@@ -281,6 +306,9 @@ manga-cli sources remove animeworld
 | `-m, --manga` | Read manga chapters |
 | `-s, --source <id\>` | Filter search/playback to a specific source ID |
 | `-l, --lang <code\>` | Filter by scan/catalog language (e.g. `it`, `en`, `es`, `fr`, `ja`) |
+| `--catalog` | Display catalog of titles (supports `--anime`, `--manga`, `--source`, `--lang`) |
+| `--catalog-anime` | Display full anime catalog (or for a specific source with `--source`) |
+| `--catalog-manga` | Display full manga catalog (or for a specific source with `--source`) |
 | `--dub` | Prefer Italian dubbed audio (ITA) for anime |
 | `--sub` | Prefer Japanese audio with Italian subtitles (SUB ITA) |
 | `-e, --episode <num\>` | Jump directly to episode number |

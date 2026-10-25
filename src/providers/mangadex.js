@@ -47,6 +47,35 @@ class MangaDexProvider extends BaseProvider {
   }
 
   /**
+   * Fetch top catalog from MangaDex
+   */
+  async getCatalog(lang = null) {
+    try {
+      const url = `${this.baseUrl}/manga?limit=100&order[followedCount]=desc&includes[]=author`;
+      const res = await fetchJson(url);
+      if (!res || !res.data) return [];
+      return res.data.map(item => {
+        const attrs = item.attributes;
+        const title = attrs.title.en || attrs.title['ja-ro'] || Object.values(attrs.title)[0] || 'Unknown Title';
+        const authorRel = item.relationships ? item.relationships.find(r => r.type === 'author') : null;
+        const author = authorRel && authorRel.attributes ? authorRel.attributes.name : '';
+        const tags = (attrs.tags || []).slice(0, 3).map(t => t.attributes && t.attributes.name && t.attributes.name.en).filter(Boolean).join(', ');
+        return {
+          id: item.id,
+          title,
+          url: `${this.baseUrl}/manga/${item.id}`,
+          author,
+          genres: tags,
+          source: 'mangadex',
+          language: lang || 'all'
+        };
+      });
+    } catch (err) {
+      return [];
+    }
+  }
+
+  /**
    * Get all chapters in the specified language (or all languages if null)
    */
   async getChapters(mangaUrl, lang = null) {
