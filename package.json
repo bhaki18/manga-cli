@@ -1,6 +1,6 @@
 {
   "name": "manga-cli",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Terminal CLI to read manga online and stream anime with RAM caching, instant streaming, and MPV integration",
   "main": "src/cli.js",
   "bin": {

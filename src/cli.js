@@ -53,7 +53,7 @@ const animePlayer = new AnimePlayer();
 program
   .name('manga-cli')
   .description('Universal Terminal CLI to read Manga and stream Anime with instant playback, downloading, and RAM caching')
-  .version('2.0.0')
+  .version('2.1.0')
   .argument('[query...]', 'Search manga or anime by title (or subcommand: watch, read, download, history, random, sources, info)')
   // Target mode
   .option('-a, --anime', 'Watch anime stream')

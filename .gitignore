@@ -4,3 +4,4 @@ src/manga-cli-git/
 pkg/
 manga-cli-git/
 *.log
+*.src.tar.gz

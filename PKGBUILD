@@ -1,6 +1,6 @@
 # Maintainer: bhaki18 <https://github.com/bhaki18>
 pkgname=manga-cli-git
-pkgver=2.0.0
+pkgver=2.1.0
 pkgrel=1
 pkgdesc="Terminal CLI to read manga online and stream anime with RAM caching and MPV integration"
 arch=('any')
