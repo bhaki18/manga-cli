@@ -4,7 +4,16 @@ const { fetchHtml } = require('../utils/http');
 
 class OnePiecePowerAnimeProvider extends BaseProvider {
   constructor() {
-    super('One Piece Power Anime', 'https://onepiecepower.com');
+    super('One Piece Power Anime', 'https://onepiecepower.com', {
+      id: 'onepiecepower-anime',
+      type: 'anime',
+      languages: ['it', 'en'],
+      isBuiltIn: true
+    });
+    this.id = 'onepiecepower-anime';
+    this.type = 'anime';
+    this.languages = ['it', 'en'];
+    this.isBuiltIn = true;
     this.animeListCache = null;
   }
 

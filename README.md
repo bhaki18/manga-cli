@@ -240,6 +240,37 @@ manga-cli -a -D      # Delete only watched anime history
 manga-cli -m -D      # Delete only read manga history
 ```
 
+### 🧩 Custom Sources & Community Store (`manga-cli sources`)
+
+Extend `manga-cli` with community extensions or custom plugins for Manga and Anime without touching the core codebase!
+
+```bash
+# Sfoglia lo store grafico interattivo (seleziona e installa con spazio e invio)
+manga-cli sources explore
+
+# Installa direttamente una fonte comunitaria per nome (es. AnimeWorld)
+manga-cli sources install animeworld
+
+# Aggiorna tutte le fonti comunitarie installate
+manga-cli sources update
+
+# Visualizza tutte le fonti attive (built-in e plugin installati)
+manga-cli sources list
+
+# Filtra ricerche ed esecuzioni su una fonte specifica
+manga-cli "berserk" -m --source mangadex
+manga-cli "solo leveling" -a --source animeworld
+
+# Per sviluppatori: crea un nuovo template pronto da compilare
+manga-cli sources new "mia-fonte"           # Template Manga
+manga-cli sources new "mio-anime" --anime   # Template Anime
+
+# Rimuovi una fonte installata
+manga-cli sources remove animeworld
+```
+
+📖 **Guida Completa**: Consulta [GUIDE.md](GUIDE.md) per tutti i dettagli su come sfogliare lo store o creare nuovi provider personalizzati.
+
 ---
 
 ## 📋 Full Command-Line Options Reference
@@ -248,6 +279,7 @@ manga-cli -m -D      # Delete only read manga history
 | :--- | :--- |
 | `-a, --anime` | Watch anime stream |
 | `-m, --manga` | Read manga chapters |
+| `-s, --source <id\>` | Filter search/playback to a specific source ID |
 | `-l, --lang <code\>` | Filter by scan/catalog language (e.g. `it`, `en`, `es`, `fr`, `ja`) |
 | `--dub` | Prefer Italian dubbed audio (ITA) for anime |
 | `--sub` | Prefer Japanese audio with Italian subtitles (SUB ITA) |

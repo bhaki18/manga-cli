@@ -4,7 +4,16 @@ const { fetchHtml } = require('../utils/http');
 
 class MangapillProvider extends BaseProvider {
   constructor() {
-    super('Mangapill (Global Free English)', 'https://mangapill.com');
+    super('Mangapill (Global Free English)', 'https://mangapill.com', {
+      id: 'mangapill',
+      type: 'manga',
+      languages: ['en'],
+      isBuiltIn: true
+    });
+    this.id = 'mangapill';
+    this.type = 'manga';
+    this.languages = ['en'];
+    this.isBuiltIn = true;
   }
 
   /**

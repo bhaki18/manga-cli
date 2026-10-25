@@ -3,7 +3,16 @@ const { fetchJson } = require('../utils/http');
 
 class MangaDexProvider extends BaseProvider {
   constructor() {
-    super('MangaDex (Global Multi-Language)', 'https://api.mangadex.org');
+    super('MangaDex (Global Multi-Language)', 'https://api.mangadex.org', {
+      id: 'mangadex',
+      type: 'manga',
+      languages: ['all'],
+      isBuiltIn: true
+    });
+    this.id = 'mangadex';
+    this.type = 'manga';
+    this.languages = ['all'];
+    this.isBuiltIn = true;
   }
 
   /**

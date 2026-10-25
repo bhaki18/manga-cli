@@ -4,7 +4,16 @@ const { fetchHtml, checkUrlExists } = require('../utils/http');
 
 class OnePiecePowerProvider extends BaseProvider {
   constructor() {
-    super('One Piece Power', 'https://onepiecepower.com');
+    super('One Piece Power', 'https://onepiecepower.com', {
+      id: 'onepiecepower',
+      type: 'manga',
+      languages: ['it', 'en'],
+      isBuiltIn: true
+    });
+    this.id = 'onepiecepower';
+    this.type = 'manga';
+    this.languages = ['it', 'en'];
+    this.isBuiltIn = true;
     this.mangaListCache = null;
   }
 

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "animeworld",
+    "name": "AnimeWorld",
+    "type": "anime",
+    "languages": ["it"],
+    "description": "Catalogo anime completo con streaming 1080p diretto (SUB ITA & ITA)",
+    "version": "1.0.0",
+    "file": "animeworld.js",
+    "url": "https://www.animeworld.ac"
+  }
+]
