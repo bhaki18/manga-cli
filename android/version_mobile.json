@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "pkgver": "1.0.0",
+  "pkgrel": "1",
+  "notes": "Prima release ufficiale di Manga GUI per Android!\n- Streaming Anime con player nativo ExoPlayer\n- Lettore Manga continuo (webtoon)\n- Ricerche recenti e filtri stile/audio\n- Download offline",
+  "apkUrl": "https://bhaki18.github.io/manga-cli/android/app-release.apk"
+}
