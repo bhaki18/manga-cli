@@ -1,7 +1,7 @@
 {
-  "version": "1.0.1",
-  "pkgver": "1.0.1",
+  "version": "1.0.2",
+  "pkgver": "1.0.2",
   "pkgrel": "1",
-  "notes": "Novità di questo aggiornamento:\\n- Nuove impostazioni nel reader\\n- Migliorata stabilità del player",
+  "notes": "Novità di questo aggiornamento:\\n- fixata la scelta del sub/dub",
   "apkUrl": "https://bhaki18.github.io/manga-cli/android/app-release.apk"
 }
