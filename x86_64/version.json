@@ -1,0 +1,11 @@
+{
+  "version": "1.1.0-1",
+  "pkgver": "1.1.0",
+  "pkgrel": "1",
+  "releaseDate": "2026-10-30",
+  "repoUrl": "https://github.com/bhaki18/manga-gui.git",
+  "rawVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-gui/main/version.json",
+  "ghPagesVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/version.json",
+  "archPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/x86_64/manga-gui-bin-1.1.0-1-x86_64.pkg.tar.zst",
+  "notes": "Nuova versione 1.1.0"
+}
