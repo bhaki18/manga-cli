@@ -1,7 +1,7 @@
 {
-  "version": "1.0.2",
-  "pkgver": "1.0.2",
+  "version": "1.0.3",
+  "pkgver": "1.0.3",
   "pkgrel": "1",
-  "notes": "Novità di questo aggiornamento:\\n- fixata la scelta del sub/dub",
+  "notes": "Novità di questo aggiornamento:\\n- fixato il reader per i manga!",
   "apkUrl": "https://bhaki18.github.io/manga-cli/android/app-release.apk"
 }
