@@ -1,7 +1,7 @@
 {
-  "version": "1.0.7",
-  "pkgver": "1.0.7",
+  "version": "1.0.8",
+  "pkgver": "1.0.8",
   "pkgrel": "1",
-  "notes": "Novità di questo aggiornamento: fixed networks issues",
+  "notes": "Novità di questo aggiornamento: patch",
   "apkUrl": "https://bhaki18.github.io/manga-cli/android/app-release.apk"
 }
