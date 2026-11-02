@@ -9,5 +9,5 @@
   "archPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/x86_64/manga-gui-bin-1.1.7-1-x86_64.pkg.tar.zst",
   "debPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/manga-gui_1.1.7-1_amd64.deb",
   "linuxTarballUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/manga-gui-linux-x64.tar.gz",
-  "notes": "Novità di questo aggiornamento: fix installer per Windows, sblocco SmartScreen e fallback automatico player video (MPV -> VLC -> Player di sistema)"
+  "notes": "Novità di questo aggiornamento: fix reader for windows"
 }
