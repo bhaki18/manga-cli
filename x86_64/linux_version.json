@@ -7,8 +7,8 @@
   "rawVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-gui-linux/main/linux_version.json",
   "ghPagesVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/linux_version.json",
   "archPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/x86_64/manga-gui-bin-1.1.6-5-x86_64.pkg.tar.zst",
-  "debPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/manga-gui_1.1.6-5_amd64.deb",
-  "linuxTarballUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/manga-gui-linux-x64.tar.gz",
+  "debPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/deb/manga-gui_1.1.6-5_amd64.deb",
+  "linuxTarballUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/tar/manga-gui-linux-x64.tar.gz",
   "notes": "Manga GUI Linux Edition: repository dedicato Linux"
 }
 
