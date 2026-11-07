@@ -6,8 +6,6 @@
   "repoUrl": "https://github.com/bhaki18/manga-gui.git",
   "rawVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-gui/main/version.json",
   "ghPagesVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/version.json",
-  "archPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/x86_64/manga-gui-bin-1.2.7-1-x86_64.pkg.tar.zst",
-  "debPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/manga-gui_1.2.7-1_amd64.deb",
-  "linuxTarballUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/manga-gui-linux-x64.tar.gz",
+  "windowsZipUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/windows/manga-gui-windows.zip",
   "notes": "100% English UI, dynamic SUB/DUB selector, sequential cover loading, cross-source deduplication"
 }
