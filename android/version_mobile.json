@@ -1,7 +1,7 @@
 {
-  "version": "1.0.9",
-  "pkgver": "1.0.9",
+  "version": "1.1.10",
+  "pkgver": "1.1.10",
   "pkgrel": "1",
-  "notes": "Novità di questo aggiornamento: patch",
+  "notes": "100% English UI, dynamic SUB/DUB selector, sequential cover loading, cross-source deduplication",
   "apkUrl": "https://bhaki18.github.io/manga-cli/android/app-release.apk"
 }
