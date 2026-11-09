@@ -1,13 +1,13 @@
 {
-  "version": "1.2.7-1",
-  "pkgver": "1.2.7",
+  "version": "1.2.8-1",
+  "pkgver": "1.2.8",
   "pkgrel": "1",
-  "releaseDate": "2026-11-07",
+  "releaseDate": "2026-11-09",
   "repoUrl": "https://github.com/bhaki18/manga-gui-linux.git",
   "rawVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-gui-linux/main/linux_version.json",
   "ghPagesVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/linux_version.json",
-  "archPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/x86_64/manga-gui-bin-1.2.7-1-x86_64.pkg.tar.zst",
-  "debPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/deb/manga-gui_1.2.7-1_amd64.deb",
+  "archPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/x86_64/manga-gui-bin-1.2.8-1-x86_64.pkg.tar.zst",
+  "debPackageUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/deb/manga-gui_1.2.8-1_amd64.deb",
   "linuxTarballUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/tar/manga-gui-linux-x64.tar.gz",
-  "notes": "100% English UI, dynamic SUB/DUB selector, sequential cover loading, cross-source deduplication"
+  "notes": "fixed web requests for manga's covers"
 }
