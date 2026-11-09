@@ -1,7 +1,7 @@
 {
-  "version": "1.1.12",
-  "pkgver": "1.1.12",
+  "version": "1.1.13",
+  "pkgver": "1.1.13",
   "pkgrel": "1",
-  "notes": "updated more the reader!",
-  "apkUrl": "https://bhaki18.github.io/manga-cli/android/manga-gui-1.1.12.apk"
+  "notes": "fixed the web engine for requests",
+  "apkUrl": "https://bhaki18.github.io/manga-cli/android/manga-gui-1.1.13.apk"
 }
