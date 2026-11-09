@@ -1,11 +1,11 @@
 {
-  "version": "1.2.7-1",
-  "pkgver": "1.2.7",
+  "version": "1.2.8",
+  "pkgver": "1.2.8",
   "pkgrel": "1",
-  "releaseDate": "2026-11-07",
+  "releaseDate": "2026-11-09",
   "repoUrl": "https://github.com/bhaki18/manga-gui.git",
   "rawVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-gui/main/version.json",
   "ghPagesVersionUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/version.json",
   "windowsZipUrl": "https://raw.githubusercontent.com/bhaki18/manga-cli/gh-pages/windows/manga-gui-windows.zip",
-  "notes": "100% English UI, dynamic SUB/DUB selector, sequential cover loading, cross-source deduplication"
+  "notes": "fixed web requests for manga's covers"
 }
